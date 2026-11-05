@@ -1,0 +1,46 @@
+# FILE: k8s/service.yaml
+# RUOLO: Bilanciatore di carico interno e indirizzo IP virtuale stabile (Kubernetes Service).
+
+# apiVersion: Versione delle API di base (core/v1) di Kubernetes.
+apiVersion: v1
+
+# kind: Service -> Astrazione di rete fondamentale di Kubernetes.
+# Poiché i Pod sono volatili (nascono, muoiono e cambiano indirizzo IP continuamente),
+# un Service crea un punto di accesso permanente e immutabile dotato di un nome DNS interno stabile.
+kind: Service
+
+# metadata: Identificativi della risorsa
+metadata:
+  # name: Nome del servizio (es. 'diabetes-forecasting-service').
+  # Altri pod nel cluster possono contattarlo semplicemente usando questo nome come host:
+  # http://diabetes-forecasting-service/predict
+  name: diabetes-forecasting-service
+  namespace: default
+  labels:
+    app: diabetes-forecasting-api
+
+# spec: Specifica tecnica del comportamento di rete
+spec:
+  # type: ClusterIP -> È il tipo di servizio predefinito.
+  # Assegna un indirizzo IP virtuale raggiungibile SOLO dall'interno del cluster Kubernetes.
+  # MOTIVAZIONE DI SICUREZZA: I pod applicativi non sono esposti direttamente a internet!
+  # L'unico componente autorizzato a parlare con questo Service è l'Ingress NGINX.
+  type: ClusterIP
+
+  # selector: Il meccanismo di aggancio (binding) con i pod.
+  # Il Service cerca costantemente nel cluster tutti i pod che possiedono l'etichetta 'app: diabetes-forecasting-api'
+  # e che hanno superato con successo la Readiness Probe (/ready).
+  selector:
+    app: diabetes-forecasting-api
+
+  # ports: Mappatura delle porte di rete
+  ports:
+    # name: Etichetta testuale della porta
+    - name: http
+      # port: 80 -> La porta su cui il Service accetta connessioni all'interno del cluster (dall'Ingress NGINX).
+      port: 80
+      # targetPort: 8000 -> La porta su cui l'applicazione FastAPI è effettivamente in ascolto dentro il container.
+      # Il Service riceve sulla porta 80 e "smista" (port-forwarding con bilanciamento Round-Robin) alla porta 8000 di uno dei pod sani.
+      targetPort: 8000
+      # protocol: TCP -> Protocollo di trasmissione affidabile a livello di trasporto
+      protocol: TCP

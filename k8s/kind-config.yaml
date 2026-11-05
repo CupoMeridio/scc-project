@@ -1,0 +1,57 @@
+# FILE: k8s/kind-config.yaml
+# RUOLO: File di configurazione per la creazione del cluster Kubernetes locale tramite KinD.
+
+# kind: Specifica il tipo di risorsa da creare. In questo caso è un 'Cluster' KinD.
+kind: Cluster
+
+# apiVersion: Versione delle API di KinD utilizzate per interpretare questo file YAML.
+apiVersion: kind.x-k8s.io/v1alpha4
+
+# nodes: Lista che definisce i nodi (le "macchine virtuali", simulate come container Docker) del cluster.
+nodes:
+  # ----------------------------------------------------------------------------
+  # NODO 1: CONTROL-PLANE (IL NODO MASTER)
+  # ----------------------------------------------------------------------------
+  # role: control-plane -> Questo nodo ospita il "cervello" di Kubernetes:
+  # l'API Server, il controller manager, lo scheduler e il database distribuito etcd.
+  - role: control-plane
+    
+    # kubeadmConfigPatches: Permette di iniettare configurazioni personalizzate durante l'inizializzazione del nodo.
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            # Assegna l'etichetta (label) 'ingress-ready=true' a questo nodo.
+            # Questo dice al controller NGINX Ingress di installarsi fisicamente su questa macchina,
+            # così potrà ricevere il traffico proveniente dall'esterno.
+            node-labels: "ingress-ready=true"
+            
+    # extraPortMappings: Mappatura delle porte di rete tra il sistema host e il container del nodo master.
+    # Corrisponde alla funzionalità del flag '-p 80:80' di Docker.
+    extraPortMappings:
+      # containerPort 80: La porta interna del cluster dove NGINX Ingress ascolta il traffico HTTP in chiaro.
+      # hostPort 80: Porta sul sistema host; all'indirizzo http://localhost, la richiesta entra qui.
+      # protocol TCP: Protocollo di trasporto standard per il traffico web.
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+        
+      # containerPort 443: La porta interna per il traffico cifrato HTTPS.
+      # hostPort 443: Porta HTTPS sul sistema host (https://localhost).
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+
+  # ----------------------------------------------------------------------------
+  # NODO 2: PRIMO WORKER NODE
+  # ----------------------------------------------------------------------------
+  # role: worker -> Nodo lavoratore dedicato esclusivamente all'esecuzione dei pod applicativi.
+  - role: worker
+
+  # ----------------------------------------------------------------------------
+  # NODO 3: SECONDO WORKER NODE
+  # ----------------------------------------------------------------------------
+  # Avere 2 nodi worker separati rispetta il Requisito F della traccia ("one or more worker nodes")
+  # e garantisce l'alta disponibilità: se un worker node esaurisce la RAM, l'altro continua a lavorare!
+  - role: worker

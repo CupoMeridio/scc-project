@@ -1,0 +1,18 @@
+# FILE: k8s/pdb.yaml
+# RUOLO: PodDisruptionBudget (PDB) per garantire l'alta disponibilità continua (SLA 99.5%).
+# Impedisce che operazioni amministrative sul cluster (node drain, upgrade) possano
+# rendere indisponibili più di 1 replica contemporaneamente.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: diabetes-api-pdb
+  namespace: default
+  labels:
+    app: diabetes-forecasting-api
+spec:
+  # minAvailable: 2 -> Garantisce che almeno 2 delle 3 repliche siano SEMPRE attive e pronte a rispondere
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: diabetes-forecasting-api

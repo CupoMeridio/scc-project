@@ -1,0 +1,18 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Force LF on shell scripts and Linux configuration files
+*.sh text eol=lf
+*.lua text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+Dockerfile text eol=lf
+Makefile text eol=lf
+requirements.txt text eol=lf
+
+# Force CRLF on Windows-specific scripts
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

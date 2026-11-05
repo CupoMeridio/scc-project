@@ -1,0 +1,210 @@
+# FILE: k8s/deployment.yaml
+# RUOLO: Dichiarazione dello stato desiderato dei pod (repliche, sicurezza, risorse, sonde).
+
+# apiVersion: Gruppo di API di Kubernetes per la gestione delle applicazioni (apps) e versione (v1).
+apiVersion: apps/v1
+
+# kind: Tipo di risorsa. Un 'Deployment' gestisce il ciclo di vita, gli aggiornamenti
+# e la sostituzione automatica dei pod senza interruzione del servizio.
+kind: Deployment
+
+# metadata: Informazioni descrittive per identificare la risorsa all'interno del cluster.
+metadata:
+  # name: Nome univoco del deployment in questo namespace
+  name: diabetes-forecasting-api
+  # namespace: Raggruppamento logico isolato (namespace 'default')
+  namespace: default
+  # labels: Coppie chiave-valore usate per filtrare e organizzare le risorse
+  labels:
+    app: diabetes-forecasting-api
+    tier: api
+    security-level: hardened
+
+# spec: Specifica tecnica che descrive COME deve comportarsi il deployment
+spec:
+  # ----------------------------------------------------------------------------
+  # 1. REPLICHE E ALTA DISPONIBILITÀ (Requisito SLA: 99.5% Uptime)
+  # ----------------------------------------------------------------------------
+  # replicas: 3 -> Kubernetes mantiene SEMPRE 3 copie indipendenti dell'applicazione in esecuzione,
+  # distribuendole sui 2 nodi worker. Se una replica muore o un nodo viene riavviato,
+  # le altre due continuano a rispondere ai pazienti, eliminando il Single Point of Failure (SPOF).
+  replicas: 3
+
+  # strategy: Regola la modalità di aggiornamento in occasione del rilascio di una nuova versione del codice o del modello
+  strategy:
+    type: RollingUpdate # RollingUpdate: aggiornamento graduale "a caldo" senza fermare il servizio (Zero Downtime)
+    rollingUpdate:
+      # maxSurge: 1 -> Durante l'aggiornamento, Kubernetes può avviare al massimo 1 pod in più (3 + 1 = 4)
+      maxSurge: 1
+      # maxUnavailable: 0 -> IMPONE CHE ZERO POD POSSANO ESSERE INDISPONIBILI DURANTE L'AGGIORNAMENTO!
+      # La vecchia versione viene spenta SOLO dopo che la nuova versione ha superato con successo la readiness probe.
+      maxUnavailable: 0
+
+  # selector: Dice al Deployment quali pod deve controllare nel cluster
+  selector:
+    matchLabels:
+      # Prende in carico tutti i pod che possiedono questa etichetta
+      app: diabetes-forecasting-api
+
+  # template: Il "progetto costruttivo" (blueprint) usato per generare ciascuno dei 3 pod
+  template:
+    metadata:
+      labels:
+        # Questa etichetta DEVE corrispondere esattamente a 'matchLabels' definito sopra!
+        app: diabetes-forecasting-api
+    spec:
+      # automountServiceAccountToken: false -> Impedisce a Kubernetes di iniettare automaticamente
+      # il token di autenticazione del ServiceAccount nel pod: il microservizio non necessita
+      # di comunicare con le API di Kubernetes, eliminando il rischio di furto credenziali (Credential Exfiltration).
+      automountServiceAccountToken: false
+
+      # ------------------------------------------------------------------------
+      # ALTA DISPONIBILITÀ REALE (POD ANTI-AFFINITY MULTI-NODO)
+      # ------------------------------------------------------------------------
+      # Impone allo scheduler di Kubernetes di distribuire le 3 repliche su nodi worker differenti.
+      # preferredDuringScheduling... garantisce la massima dispersione tra i nodi worker (worker e worker2),
+      # prevenendo la concentrazione di tutti i pod su una singola macchina (Single Point of Failure).
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - diabetes-forecasting-api
+                topologyKey: kubernetes.io/hostname
+
+      # ------------------------------------------------------------------------
+      # 2. POD SECURITY CONTEXT (Sicurezza a livello di Macchina/Pod)
+      # ------------------------------------------------------------------------
+      securityContext:
+        # runAsNonRoot: true -> Il demone kubelet rifiuterà di avviare il container se rileva che tenta di girare come root (UID 0)
+        runAsNonRoot: true
+        # runAsUser: 10001 -> Impone l'identificativo numerico utente non privilegiato creato nel Dockerfile
+        runAsUser: 10001
+        # runAsGroup: 10001 -> Impone l'identificativo numerico del gruppo non privilegiato
+        runAsGroup: 10001
+        # fsGroup: 10001 -> I file creati o montati erediteranno i permessi di questo gruppo
+        fsGroup: 10001
+        # seccompProfile (Secure Computing Mode):
+        # type: RuntimeDefault -> Filtra le chiamate di sistema (syscall) del kernel Linux,
+        # bloccando syscall pericolose usate da exploit per manomettere il sistema operativo dell'host.
+        seccompProfile:
+          type: RuntimeDefault
+
+      # containers: Lista dei container che compongono il pod (1 solo container per pod)
+      containers:
+        - name: api # Nome del container all'interno del pod
+          # image: Nome e tag dell'immagine Docker da eseguire
+          image: diabetes-api:latest
+          # imagePullPolicy: IfNotPresent -> Cerca l'immagine nella cache locale del nodo.
+          # Configurazione necessaria per KinD, consentendo l'uso dell'immagine locale caricata nel nodo senza tentare il pull remoto.
+          imagePullPolicy: IfNotPresent
+          
+          # ports: Documenta le porte di rete esposte dal container
+          ports:
+            # containerPort: 8000 -> La porta su cui Uvicorn è in ascolto
+            - containerPort: 8000
+              name: http
+              
+          # env: Variabili d'ambiente iniettate all'interno del container all'avvio
+          env:
+            - name: PORT
+              value: "8000"
+            - name: HOST
+              value: "0.0.0.0"
+            - name: LOG_LEVEL
+              value: "INFO"
+            # MODEL_MODE: "real" -> Obbliga l'applicazione a funzionare solo col modello ONNX reale.
+            # Se il modello manca, la readiness probe restituirà 503 impedendo il disservizio silenzioso.
+            - name: MODEL_MODE
+              value: "real"
+            # MAX_INSULIN_DOSE: "20.0" -> Tetto massimo clinico insuperabile (Safety Clamp)
+            - name: MAX_INSULIN_DOSE
+              value: "20.0"
+
+          # --------------------------------------------------------------------
+          # 3. CONTAINER SECURITY CONTEXT (Principio del Minimo Privilegio)
+          # --------------------------------------------------------------------
+          securityContext:
+            # allowPrivilegeEscalation: false -> Impedisce al processo figlio di ottenere privilegi superiori
+            # a quelli del processo genitore (ad esempio sfruttando binari con bit SUID come sudo o passwd).
+            allowPrivilegeEscalation: false
+            # readOnlyRootFilesystem: true -> Rende l'INTERO filesystem del container immutabile in sola lettura!
+            # Nessun malware o exploit puo scrivere file binari o sovrascrivere file di sistema.
+            readOnlyRootFilesystem: true
+            # capabilities: Linux divide i privilegi di root in circa 40 "capacità" distinte (es. CAP_NET_ADMIN, CAP_SYS_ADMIN).
+            # drop: ["ALL"] -> Rimuove TUTTE le capacità speciali del kernel: il container può solo eseguire calcoli ordinari!
+            capabilities:
+              drop:
+                - ALL
+
+          # volumeMounts: Monta cartelle scrivibili temporanee per processi che richiedono cache temporanea (/tmp)
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+
+          # --------------------------------------------------------------------
+          # 4. LIMITI DI RISORSE (Prevenzione DoS e Noisy-Neighbor)
+          # --------------------------------------------------------------------
+          resources:
+            # requests: Risorse minime GARANTITE da Kubernetes per schedulare il pod su un nodo
+            requests:
+              # cpu: "100m" -> 100 millicores = 0.1 core di CPU (10% di un core)
+              cpu: "100m"
+              # memory: "128Mi" -> 128 Mebibyte di RAM
+              memory: "128Mi"
+            # limits: Tetto massimo ASSOLUTO. Se il pod prova a usare più di queste risorse,
+            # viene limitato (throttling su CPU) o terminato per Out-Of-Memory (OOMKilled su RAM).
+            limits:
+              # cpu: "500m" -> 0.5 core di CPU (massimo mezzo core per pod)
+              cpu: "500m"
+              # memory: "256Mi" -> Massimo 256 MB di RAM. Impedisce attacchi mirati a saturare la RAM dell'host!
+              memory: "256Mi"
+
+          # --------------------------------------------------------------------
+          # 5. LIVENESS PROBE (Sonda di Vita)
+          # --------------------------------------------------------------------
+          # Verifica se il processo Python è ancora vivo e reattivo.
+          livenessProbe:
+            httpGet:
+              path: /health # Percorso HTTP da interrogare
+              port: 8000    # Porta su cui inviare la richiesta
+            # initialDelaySeconds: 5 -> Attende 5 secondi dopo l'avvio del container prima del primo controllo
+            initialDelaySeconds: 5
+            # periodSeconds: 10 -> Ripete il controllo ogni 10 secondi
+            periodSeconds: 10
+            # timeoutSeconds: 2 -> Se l'app non risponde entro 2 secondi, il controllo è fallito
+            timeoutSeconds: 2
+            # failureThreshold: 3 -> Se fallisce per 3 volte consecutive, Kubernetes UCCIDE e RIAVVIA il pod!
+            failureThreshold: 3
+
+          # --------------------------------------------------------------------
+          # 6. READINESS PROBE (Sonda di Prontezza)
+          # --------------------------------------------------------------------
+          # Verifica se il pod è PRONTO ad accettare il traffico dei pazienti.
+          readinessProbe:
+            httpGet:
+              path: /ready # Percorso HTTP da interrogare
+              port: 8000
+            # initialDelaySeconds: 3 -> Attende 3 secondi dall'avvio
+            initialDelaySeconds: 3
+            # periodSeconds: 5 -> Intervallo di polling ogni 5 secondi
+            periodSeconds: 5
+            # timeoutSeconds: 1 -> Timeout stretto di 1 secondo
+            timeoutSeconds: 1
+            # failureThreshold: 2 -> Se fallisce 2 volte consecutive (es. risponde 503),
+            # Kubernetes RIMUOVE il pod dal bilanciatore di carico: il traffico va solo ai pod sani!
+            failureThreshold: 2
+
+      # ------------------------------------------------------------------------
+      # 7. VOLUMI DI SISTEMA (RAM/DISCO TEMPORANEO ISOLATO)
+      # ------------------------------------------------------------------------
+      volumes:
+        # emptyDir: Crea una directory temporanea vuota montata in /tmp
+        # Permette al container di scrivere file temporanei pur mantenendo il filesystem radice read-only
+        - name: tmp-volume
+          emptyDir: {}
