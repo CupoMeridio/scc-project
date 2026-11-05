@@ -1,0 +1,109 @@
+# FILE: k8s/ingress.yaml
+# RUOLO: Gateway d'ingresso NGINX e implementazione delle misure di sicurezza perimetrali.
+
+# apiVersion: Versione stabile delle API di rete di Kubernetes per la risorsa Ingress.
+apiVersion: networking.k8s.io/v1
+
+# kind: Ingress -> Regole di instradamento del traffico HTTP/HTTPS dall'esterno del cluster verso i Service interni.
+kind: Ingress
+
+metadata:
+  name: diabetes-forecasting-ingress
+  namespace: default
+  
+  # annotations: Metadati avanzati letti dal controller NGINX per attivare moduli e configurazioni specifiche.
+  # RISPONDE ALLA RICHIESTA DELLA TRACCIA: "Discuss and motivate how to set cluster security measures by using NGINX."
+  annotations:
+    # kubernetes.io/ingress.class: "nginx" -> Dice a Kubernetes che questo Ingress deve essere elaborato da NGINX
+    kubernetes.io/ingress.class: "nginx"
+
+    # --------------------------------------------------------------------------
+    # 1. RATE LIMITING (Prevenzione attacchi Denial of Service - DoS)
+    # --------------------------------------------------------------------------
+    # MOTIVAZIONE ARCHITETTURALE & DIMENSIONAMENTO SLA:
+    # L'SLA richiede un throughput di picco di 5.000 req/min (~83.33 RPS aggregate).
+    # Poiche in scenari clinici reali (ospedali, cliniche, o proxy aziendali) centinaia di sensori
+    # o operatori possono uscire su internet condividendo il medesimo indirizzo IP pubblico (NAT),
+    # impostare un limite troppo basso (es. 50-80 RPS per IP) causerebbe falsi positivi (HTTP 429).
+    # Allo stesso tempo, durante lo stress test con wrk da singola macchina (localhost),
+    # tutte le richieste provengono da un singolo IP.
+    # - limit-rps: "150" -> Garantisce ampio margine oltre il target SLA (83.33 RPS) anche se
+    #   aggregato da un singolo gateway NAT ospedaliero.
+    # - limit-burst-multiplier: "3" -> Permette raffiche temporanee fino a 450 richieste (150 * 3)
+    #   senza perdite di pacchetti (Leaky Bucket queue). Traffico anomalo superiore viene bloccato con 429.
+    nginx.ingress.kubernetes.io/limit-rps: "150"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
+
+    # --------------------------------------------------------------------------
+    # 2. CONNECTION LIMITING (Prevenzione attacchi Slowloris)
+    # --------------------------------------------------------------------------
+    # MOTIVAZIONE: Negli attacchi Slowloris, un aggressore apre migliaia di connessioni TCP
+    # inviando dati con estrema lentezza per esaurire la tabella dei file descriptor del sistema operativo.
+    # - limit-connections: "50" -> Limita a un massimo di 50 connessioni TCP contemporanee per singolo IP.
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+
+    # --------------------------------------------------------------------------
+    # 3. BUFFER OVERFLOW E MEMORY STARVATION PROTECTION
+    # --------------------------------------------------------------------------
+    # MOTIVAZIONE: Il payload JSON di una serie temporale clinica [12 x 3] pesa meno di 2 KB.
+    # Se un client inviasse un payload da 100 MB, i worker node potrebbero andare in Out-Of-Memory (OOM).
+    # - proxy-body-size: "1m" -> Limita la dimensione massima del corpo della richiesta HTTP a 1 Megabyte.
+    #   Richieste superiori a 1 MB vengono rifiutate all'istante da NGINX con errore HTTP 413 Payload Too Large!
+    # - proxy-buffer-size: "16k" -> Buffer dedicato all'elaborazione degli header HTTP.
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+
+    # --------------------------------------------------------------------------
+    # 4. TIMEOUT RESTRITTIVI CONTRO CONNESSIONI APPESE
+    # --------------------------------------------------------------------------
+    # - proxy-connect-timeout: "5" -> Massimo 5 secondi per stabilire la connessione con i pod interni.
+    # - proxy-read-timeout: "10" -> Chiude la connessione se il backend non invia dati per 10 secondi.
+    # - proxy-send-timeout: "10" -> Chiude la connessione se il client non invia dati per 10 secondi.
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "10"
+
+    # --------------------------------------------------------------------------
+    # 5. WHITELIST DEI METODI HTTP (Minima Superficie d'Attacco)
+    # --------------------------------------------------------------------------
+    # MOTIVAZIONE: L'applicazione supporta solo GET (per monitoraggio /health) e POST (per /predict).
+    # Qualsiasi altro verbo HTTP (es. PUT, DELETE, TRACE, PATCH) è inutile e pericoloso.
+    # server-snippet: Frammento di configurazione nativa di NGINX iniettato nel blocco server {}:
+    # Se il metodo non è GET, POST o HEAD, NGINX lo respinge subito con errore HTTP 405 Method Not Allowed!
+    nginx.ingress.kubernetes.io/server-snippet: |
+      if ($request_method !~ ^(GET|POST|HEAD)$ ) {
+          return 405;
+      }
+
+    # --------------------------------------------------------------------------
+    # 6. HEADER DI SICUREZZA HTTP (Defense in Depth)
+    # --------------------------------------------------------------------------
+    # configuration-snippet: Inietta direttive NGINX nel blocco location {} del reverse proxy:
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # more_set_headers: Sostituisce o impone l'header nella risposta HTTP verso il client:
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+
+# spec: Regole di routing del traffico in ingresso
+spec:
+  # ingressClassName: "nginx" -> Standard moderno Kubernetes per associare la classe dell'Ingress
+  ingressClassName: nginx
+  rules:
+    # http: Regole per il traffico web
+    - http:
+        paths:
+          # path: / -> Qualsiasi richiesta HTTP che inizia con '/' (es. http://localhost/predict o /health)
+          - path: /
+            # pathType: Prefix -> Match per prefisso: cattura tutti i sotto-percorsi (/health, /ready, /predict)
+            pathType: Prefix
+            # backend: Destinazione interna del traffico
+            backend:
+              service:
+                # name: Il nome esatto del Kubernetes Service creato in k8s/service.yaml
+                name: diabetes-forecasting-service
+                port:
+                  # number: 80 -> La porta su cui il Service accetta connessioni
+                  number: 80

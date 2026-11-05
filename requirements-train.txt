@@ -1,0 +1,6 @@
+# Offline training & model export dependencies
+torch>=2.2.0
+onnx>=1.16.0
+numpy>=2.0.0
+scikit-learn>=1.4.0
+pandas>=2.2.0
