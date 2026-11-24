@@ -1,90 +1,72 @@
 """
+===============================================================================
 FILE: tests/test_api.py
-RUOLO: Suite di test automatizzati (Unit e Integration Testing) con pytest.
+RUOLO: Suite completa di test automatizzati (Unit and Integration Testing) con pytest.
+CONTESTO CLINICO:
+    Verifica del contratto API, della corretta inferenza ONNX, delle risposte delle
+    sonde Kubernetes (Health e Readiness) e del blocco preventivo di dati anomali
+    (corruzione numerica, valori non fisiologici, array di lunghezza errata).
+===============================================================================
 """
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, compute_discrete_risk_class
 from app.config import settings
+
 
 @pytest.fixture
 def client():
     """
-    Fixture di test per l'istanziazione controllata del client HTTP di collaudo.
-    
-    COSA FA:
-    Crea un'istanza di 'TestClient' collegata all'applicazione FastAPI 'app'.
+    Fixture di test per l'istanziazione del client HTTP di collaudo.
     L'uso del context manager 'with TestClient(app) as test_client:' attiva esplicitamente
     il ciclo di vita ASGI (Lifespan Context Manager):
-    - Esegue le operazioni di Cold-Start prima di 'yield' (inizializzazione modello).
-    - Consegna l'oggetto 'test_client' alle funzioni di test che lo richiedono come parametro.
-    - Esegue le operazioni di Graceful Teardown dopo 'yield' al completamento del test.
-    
-    MECCANISMO DI DEPENDENCY INJECTION:
-    Nei test di pytest, qualsiasi funzione che dichiara un argomento con lo stesso nome
-    della fixture (es. 'def test_something(client):') riceve automaticamente l'oggetto restituito da 'yield'.
+    - Inizializza i metadati e il runtime ONNX prima dei test.
+    - Consegna l'oggetto 'test_client' alle funzioni di collaudo.
+    - Esegue il Graceful Teardown al termine dei test.
     """
     with TestClient(app) as test_client:
         yield test_client
 
+
 def test_health_liveness(client: TestClient):
     """
     TEST 1: Verifica della Liveness Probe (/health) per Kubernetes.
-    
-    PARAMETRI:
-    - client (TestClient): Client HTTP locale iniettato automaticamente dalla fixture 'client'.
-    
-    COSA VERIFICA:
-    - response.status_code == 200: l'endpoint risponde con codice di successo HTTP standard.
-    - data["status"] == "healthy": il payload JSON conferma la corretta vitalità del processo.
-    - "app_version" in data: la risposta include la versione applicativa per verifiche di rollout.
+    - Verifica che il processo web sia attivo e risponda con codice HTTP 200.
+    - Verifica che il payload contenga lo status 'healthy' e la versione applicativa.
     """
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
     assert "app_version" in data
+    assert "model_loaded" in data
 
-def test_ready_readiness_probe_current_mode(client: TestClient):
+
+def test_ready_readiness_probe(client: TestClient):
     """
-    TEST 2: Verifica della Readiness Probe (/ready) nello stato operativo corrente.
-    
-    PARAMETRI:
-    - client (TestClient): Client HTTP locale iniettato automaticamente dalla fixture 'client'.
-    
-    COSA VERIFICA:
-    - In modalità 'mock': l'endpoint deve sempre rispondere con HTTP 200.
-    - In modalità 'real': risponde con HTTP 503 se la sessione ONNX è assente, oppure con HTTP 200 se presente.
+    TEST 2: Verifica della Readiness Probe (/ready) a regime.
+    - Con il modello ONNX presente in memoria, risponde 200 OK e segnala model_loaded=True.
     """
     response = client.get("/ready")
-    if settings.MODEL_MODE == "real":
-        from app.main import onnx_session
-        if onnx_session is None:
-            assert response.status_code == 503
-        else:
-            assert response.status_code == 200
-    else:
+    from app.main import onnx_session
+    if onnx_session is not None:
         assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+        assert response.json()["model_loaded"] is True
+    else:
+        assert response.status_code == 503
 
-def test_ready_readiness_gate_real_mode_missing_model(monkeypatch: pytest.MonkeyPatch, tmp_path):
+
+def test_ready_readiness_gate_missing_model(monkeypatch: pytest.MonkeyPatch, tmp_path):
     """
-    TEST 3: Verifica del Readiness Gate in modalità reale (MODEL_MODE=real) con modello assente.
-    
-    PARAMETRI:
-    - monkeypatch (pytest.MonkeyPatch): Fixture nativa di pytest impiegata per sovrascrivere
-      in modo sicuro attributi di configurazione (settings.MODEL_MODE, settings.MODEL_PATH)
-      e variabili di modulo durante il test, ripristinandoli automaticamente alla fine.
-    - tmp_path (pathlib.Path): Fixture nativa di pytest che fornisce il percorso di una cartella temporanea
-      isolata e sicura nel file system per simulare file mancanti senza toccare i file di progetto.
-      
-    COSA VERIFICA:
-    - La readiness probe risponde con HTTP 503 Service Unavailable quando la modalità reale
-      è attiva ma il file ONNX non è presente su disco, impedendo a Kubernetes di instradare traffico.
+    TEST 3: Verifica del Readiness Gate con file modello assente.
+    - Simula la configurazione in cui il file ONNX non è disponibile.
+    - Verifica che la readiness probe risponda rigorosamente con HTTP 503 Service Unavailable,
+      impedendo a Kubernetes di instradare traffico clinico su un pod non inizializzato.
     """
     missing_model_path = str(tmp_path / "non_existent_model.onnx")
-    monkeypatch.setattr(settings, "MODEL_MODE", "real")
     monkeypatch.setattr(settings, "MODEL_PATH", missing_model_path)
     from app import main
     monkeypatch.setattr(main, "onnx_session", None)
@@ -94,22 +76,14 @@ def test_ready_readiness_gate_real_mode_missing_model(monkeypatch: pytest.Monkey
         assert response.status_code == 503
         data = response.json()
         assert data["status"] == "not_ready"
-        assert data["model_mode"] == "real"
 
-def test_predict_in_real_mode_without_model_returns_503(monkeypatch: pytest.MonkeyPatch, tmp_path):
+
+def test_predict_without_model_returns_503(monkeypatch: pytest.MonkeyPatch, tmp_path):
     """
-    TEST 4: Verifica di protezione dell'endpoint /predict in modalità reale senza modello ONNX.
-    
-    PARAMETRI:
-    - monkeypatch (pytest.MonkeyPatch): Sovrascrive temporaneamente le impostazioni applicative.
-    - tmp_path (pathlib.Path): Genera percorsi temporanei isolati per test deterministici.
-    
-    COSA VERIFICA:
-    - Se invocato in real mode senza sessione ONNX valida, /predict solleva un'eccezione HTTP 503
-      (Service Unavailable) e non un errore generico 500, informando il chiamante che il servizio non è pronto.
+    TEST 4: Verifica di protezione dell'endpoint /predict in assenza del modello ONNX.
+    - Se invocato senza sessione ONNX caricata, restituisce HTTP 503 anziché un crash 500.
     """
     missing_model_path = str(tmp_path / "non_existent_model.onnx")
-    monkeypatch.setattr(settings, "MODEL_MODE", "real")
     monkeypatch.setattr(settings, "MODEL_PATH", missing_model_path)
     from app import main
     monkeypatch.setattr(main, "onnx_session", None)
@@ -117,123 +91,262 @@ def test_predict_in_real_mode_without_model_returns_503(monkeypatch: pytest.Monk
     with TestClient(app) as test_client:
         payload = {
             "patient_id": "TEST_PATIENT",
-            "features": [[100.0, 0.0, 0.0]] * 12
+            "glucose_history": [5.5] * 13
         }
         response = test_client.post("/predict", json=payload)
         assert response.status_code == 503
         assert "non pronto" in response.json()["detail"].lower()
 
-def test_predict_valid_clinical_payload(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+
+def test_scaler_fail_closed_behavior(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """
+    TEST 4-BIS: Verifica del comportamento fail-closed se lo scaler manca o è corrotto.
+    - Se i metadati mancano dei parametri dello scaler, /ready e /predict devono restituire 503,
+      impedendo al modello di ricevere dati grezzi e rispondere con previsioni errate.
+    """
+    import json
+    invalid_meta_path = str(tmp_path / "missing_scaler_metadata.json")
+    with open(invalid_meta_path, "w") as f:
+        json.dump({"model_version": "1.0.0"}, f) # Privo del blocco 'scaler'
+        
+    monkeypatch.setattr(settings, "METADATA_PATH", invalid_meta_path)
+    from app import main
+    monkeypatch.setattr(main, "onnx_session", None)
+    monkeypatch.setattr(main, "scaler_params", {})
+    
+    with TestClient(app) as test_client:
+        # 1. /ready deve rifiutare lo stato pronto
+        ready_resp = test_client.get("/ready")
+        assert ready_resp.status_code == 503
+        
+        # 2. /predict deve respingere l'inferenza fail-closed
+        payload = {
+            "patient_id": "TEST_PATIENT",
+            "glucose_history": [5.5] * 13
+        }
+        pred_resp = test_client.post("/predict", json=payload)
+        assert pred_resp.status_code == 503
+        assert "non pronto" in pred_resp.json()["detail"].lower()
+
+
+def test_integrity_hash_mismatch_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """
+    TEST 4-TER: Verifica della Supply Chain Security (mancata corrispondenza SHA-256).
+    - Se i pesi del modello vengono manomessi o l'hash nei metadati non corrisponde,
+      il caricamento fallisce all'avvio e il servizio si dichiara non pronto (HTTP 503).
+    """
+    import json
+    from app import main
+    
+    # Crea un file metadati con un hash manomesso/fittizio
+    tampered_meta_path = str(tmp_path / "tampered_metadata.json")
+    tampered_meta = {
+        "model_version": "1.0.0",
+        "artifacts_integrity": {
+            "model.onnx": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "scaler": {
+            "seq_mean": [0.0, 0.0],
+            "seq_std": [1.0, 1.0],
+            "exog_mean": [0.0] * 14,
+            "exog_std": [1.0] * 14
+        }
+    }
+    with open(tampered_meta_path, "w") as f:
+        json.dump(tampered_meta, f)
+        
+    monkeypatch.setattr(settings, "METADATA_PATH", tampered_meta_path)
+    monkeypatch.setattr(main, "onnx_session", None)
+    monkeypatch.setattr(main, "scaler_params", {})
+    
+    with TestClient(app) as test_client:
+        response = test_client.get("/ready")
+        assert response.status_code == 503
+
+
+def test_predict_valid_clinical_payload(client: TestClient):
     """
     TEST 5: Verifica dell'endpoint di inferenza /predict con payload conforme e valido.
-    
-    PARAMETRI:
-    - client (TestClient): Client HTTP di test collegato all'app FastAPI.
-    - monkeypatch (pytest.MonkeyPatch): Utilizzato per abilitare la modalità mock nel caso in cui
-      il file compilato ONNX non sia presente sul disco locale durante i test unitari.
-      
     COSA VERIFICA:
-    - response.status_code == 200: la richiesta è elaborata con successo.
-    - data["patient_id"] == "PATIENT_TEST_01": l'identificativo paziente è preservato nella risposta.
-    - 0.0 <= dose <= MAX_INSULIN_DOSE: il valore calcolato rispetta rigorosamente i guardrail clinici.
-    - "request_id" in data: la risposta contiene l'identificativo di correlazione per tracciamento OWASP.
+    - Risposta HTTP 200 con JSON ben formato.
+    - Il paziente 'PATIENT_540' è correttamente tracciato.
+    - Le stime del glucosio in mmol/L e in mg/dL sono coerenti e fisiologiche.
+    - La classe di rischio è un intero compreso tra 1 e 7.
+    - La risposta include l'header X-Request-ID e la misura di latenza.
     """
-    from app.main import onnx_session
-    if onnx_session is None and settings.MODEL_MODE == "real":
-        monkeypatch.setattr(settings, "MODEL_MODE", "mock")
-
     valid_payload = {
-        "patient_id": "PATIENT_TEST_01",
-        "features": [
-            [110.0, 0.0, 0.0],
-            [112.0, 0.0, 0.0],
-            [115.0, 0.0, 0.0],
-            [120.0, 0.0, 0.0],
-            [130.0, 45.0, 0.0], # Pasto da 45g
-            [150.0, 0.0, 0.0],
-            [165.0, 0.0, 0.0],
-            [160.0, 0.0, 0.0],
-            [150.0, 0.0, 0.0],
-            [140.0, 0.0, 0.0],
-            [130.0, 0.0, 0.0],
-            [125.0, 0.0, 0.0]
+        "patient_id": "PATIENT_540",
+        "glucose_history": [
+            4.2, 4.0, 3.8, 3.6, 3.5, 3.7, 3.9, 4.3, 5.0, 5.5, 6.1, 6.7, 7.3
+        ],
+        "exogenous_inputs": [
+            3.6, 0.0,
+            3.8, 0.0,
+            3.9, 0.0,
+            4.1, 0.0,
+            4.2, 0.0,
+            4.3, 0.0,
+            4.5, 0.0
         ]
     }
     response = client.post("/predict", json=valid_payload)
     assert response.status_code == 200
     data = response.json()
-    assert data["patient_id"] == "PATIENT_TEST_01"
-    assert 0.0 <= data["forecasted_insulin_units"] <= settings.MAX_INSULIN_DOSE
+    assert data["patient_id"] == "PATIENT_540"
+    assert data["current_glucose_mmol_l"] == 7.3
+    assert 1.0 <= data["forecasted_glucose_mmol_l"] <= 35.0
+    assert 1 <= data["risk_class"] <= 7
+    assert "risk_label" in data
+    assert "clinical_alert" in data
+    assert data["inference_engine"] == "ONNX-Runtime-C++"
     assert "request_id" in data
-    assert data["clinical_safety_status"] in ["NORMAL", "HIGH_DOSE_WARNING", "CLAMPED_MAX"]
+    assert response.headers.get("X-Request-ID") is not None
 
-def test_predict_invalid_dimensions(client: TestClient):
+
+def test_predict_invalid_history_length(client: TestClient):
     """
-    TEST 6: Verifica del rifiuto di matrici temporali con dimensioni non conformi.
-    
-    PARAMETRI:
-    - client (TestClient): Client HTTP di test.
-    
-    COSA VERIFICA:
-    - L'invio di una matrice con soli 3 intervalli anziché 12 viene intercettato da Pydantic,
-      che restituisce immediatamente HTTP 422 Unprocessable Entity senza invocare la rete neurale.
+    TEST 6: Verifica del rifiuto di cronologie glicemiche con numero errato di intervalli.
+    - L'invio di una lista con soli 5 elementi anziché 13 viene intercettato da Pydantic,
+      che restituisce immediatamente HTTP 422 Unprocessable Entity.
     """
     invalid_payload = {
-        "patient_id": "PATIENT_INVALID",
-        "features": [
-            [120.0, 0.0, 0.0],
-            [130.0, 10.0, 0.0],
-            [140.0, 0.0, 0.0]
-        ]
+        "patient_id": "PATIENT_SHORT_HISTORY",
+        "glucose_history": [5.0, 5.2, 5.4, 5.6, 5.8] # Solo 5 intervalli
     }
     response = client.post("/predict", json=invalid_payload)
     assert response.status_code == 422
 
+
 def test_predict_out_of_bounds_clinical_values(client: TestClient):
     """
-    TEST 7: Verifica del rifiuto di parametri biomedici fuori scala (Guasto Hardware Sensori).
-    
-    PARAMETRI:
-    - client (TestClient): Client HTTP di test.
-    
-    COSA VERIFICA:
-    - L'invio di una glicemia negativa (-50.0 mg/dL) viola la regola di validazione fisiologica
-      in app/schemas.py e viene respinto con HTTP 422.
+    TEST 7: Verifica del rifiuto di parametri biomedici fuori scala fisiologica.
+    - L'invio di un glucosio negativo o assurdo (-5.0 mmol/L o 100.0 mmol/L)
+      viola i vincoli biologici e viene respinto con HTTP 422.
     """
     invalid_glucose = {
         "patient_id": "PATIENT_OUT_OF_BOUNDS",
-        "features": [[-50.0, 0.0, 0.0]] * 12
+        "glucose_history": [5.0] * 12 + [-5.0] # Valore negativo
     }
     response = client.post("/predict", json=invalid_glucose)
     assert response.status_code == 422
 
+
 def test_predict_nan_rejection(client: TestClient):
     """
-    TEST 8: Verifica della protezione contro valori non numerici (NaN / Infinito).
-    
-    PARAMETRI:
-    - client (TestClient): Client HTTP di test.
-    
-    COSA VERIFICA:
-    - L'iniezione di float('nan') nei carboidrati viene bloccata dal validatore di Pydantic
-      con HTTP 422, prevenendo la corruzione dell'algebra lineare nel runtime ONNX.
+    TEST 8: Verifica della protezione contro valori non numerici (null o stringhe corrotte).
+    - L'iniezione di valori nulli o non numerici viene respinta da Pydantic con HTTP 422,
+      prevenendo la corruzione dell'algebra lineare nel runtime ONNX.
     """
-    invalid_nan = {
-        "patient_id": "PATIENT_NAN",
-        "features": [
-            [120.0, 0.0, 0.0],
-            [125.0, float("nan"), 0.0],
-            [130.0, 0.0, 0.0],
-            [135.0, 0.0, 0.0],
-            [140.0, 0.0, 0.0],
-            [145.0, 0.0, 0.0],
-            [150.0, 0.0, 0.0],
-            [140.0, 0.0, 0.0],
-            [135.0, 0.0, 0.0],
-            [130.0, 0.0, 0.0],
-            [125.0, 0.0, 0.0],
-            [120.0, 0.0, 0.0]
-        ]
+    # 1. Iniezione di null (standard JSON per valori assenti/corrotti)
+    invalid_null = {
+        "patient_id": "PATIENT_NULL",
+        "glucose_history": [5.0] * 12 + [None]
     }
-    response = client.post("/predict", json=invalid_nan)
+    response = client.post("/predict", json=invalid_null)
     assert response.status_code == 422
+
+    # 2. Iniezione di stringa non numerica
+    invalid_str = {
+        "patient_id": "PATIENT_STR",
+        "glucose_history": [5.0] * 12 + ["corrupted_signal"]
+    }
+    response_str = client.post("/predict", json=invalid_str)
+    assert response_str.status_code == 422
+
+
+def test_predict_invalid_exogenous_length(client: TestClient):
+    """
+    TEST 9: Verifica del rifiuto di vettori esogeni con dimensione non conforme.
+    - Il vettore esogeno richiede 14 valori; l'invio di 4 valori restituisce HTTP 422.
+    """
+    invalid_exog = {
+        "patient_id": "PATIENT_BAD_EXOG",
+        "glucose_history": [5.0] * 13,
+        "exogenous_inputs": [1.0, 2.0, 3.0, 4.0] # Solo 4 valori anziché 14
+    }
+    response = client.post("/predict", json=invalid_exog)
+    assert response.status_code == 422
+
+
+def test_predict_dg_history_validation(client: TestClient):
+    """
+    TEST 10: Verifica della validazione della serie temporale opzionale dg_history.
+    - Un array valido di 13 valori finiti viene accettato (HTTP 200).
+    - Un array con dimensione errata o valori fuori scala viene rifiutato con HTTP 422.
+    """
+    valid_payload = {
+        "patient_id": "PATIENT_DG_VALID",
+        "glucose_history": [5.0] * 13,
+        "dg_history": [0.0] + [0.2] * 12
+    }
+    res_valid = client.post("/predict", json=valid_payload)
+    assert res_valid.status_code == 200
+
+    invalid_len = {
+        "patient_id": "PATIENT_DG_INVALID_LEN",
+        "glucose_history": [5.0] * 13,
+        "dg_history": [0.0, 0.1, 0.2] # Solo 3 valori anziché 13
+    }
+    assert client.post("/predict", json=invalid_len).status_code == 422
+
+    out_of_bounds = {
+        "patient_id": "PATIENT_DG_OUT_OF_BOUNDS",
+        "glucose_history": [5.0] * 13,
+        "dg_history": [0.0] * 12 + [50.0] # Derivata biologicamente impossibile (+50 mmol/L in 5 min)
+    }
+    assert client.post("/predict", json=out_of_bounds).status_code == 422
+
+
+def test_predict_exogenous_upper_bounds(client: TestClient):
+    """
+    TEST 11: Verifica dei limiti fisiologici massimi sulle variabili esogene.
+    - Boli di insulina > 100 U o pasti > 300 g vengono respinti con HTTP 422.
+    """
+    excessive_insulin = {
+        "patient_id": "PATIENT_OVERDOSE",
+        "glucose_history": [5.0] * 13,
+        "exogenous_inputs": [150.0, 0.0] + [0.0] * 12 # 150 U di insulina (> 100 U)
+    }
+    assert client.post("/predict", json=excessive_insulin).status_code == 422
+
+    excessive_carbs = {
+        "patient_id": "PATIENT_EXCESSIVE_CARBS",
+        "glucose_history": [5.0] * 13,
+        "exogenous_inputs": [0.0, 450.0] + [0.0] * 12 # 450 g di carboidrati (> 300 g)
+    }
+    assert client.post("/predict", json=excessive_carbs).status_code == 422
+
+
+def test_request_id_sanitization_defense(client: TestClient):
+    """
+    TEST 12: Verifica della sanitizzazione di X-Request-ID contro Log/Header Injection.
+    - Se il client trasmette un header con caratteri speciali (CRLF o script injection),
+      il middleware genera un ID sicuro conforme.
+    """
+    malicious_header = "REQ-123\r\nInjected-Header: bad\n<script>"
+    response = client.get("/health", headers={"X-Request-ID": malicious_header})
+    assert response.status_code == 200
+    safe_id = response.headers.get("X-Request-ID")
+    assert safe_id is not None
+    assert "\r" not in safe_id and "\n" not in safe_id and "<" not in safe_id
+
+
+def test_discrete_risk_classes_boundaries():
+    """
+    TEST 13: Verifica rigorosa delle soglie di separazione per le 7 classi di rischio clinico.
+    Fasce (mmol/L): [0, 3.0) -> 1, [3.0, 3.9) -> 2, [3.9, 5.0) -> 3,
+                    [5.0, 7.8) -> 4, [7.8, 10.0) -> 5, [10.0, 13.9) -> 6, >= 13.9 -> 7.
+    """
+    assert compute_discrete_risk_class(2.5) == 1
+    assert compute_discrete_risk_class(3.0) == 2
+    assert compute_discrete_risk_class(3.89) == 2
+    assert compute_discrete_risk_class(3.9) == 3
+    assert compute_discrete_risk_class(4.99) == 3
+    assert compute_discrete_risk_class(5.0) == 4
+    assert compute_discrete_risk_class(7.79) == 4
+    assert compute_discrete_risk_class(7.8) == 5
+    assert compute_discrete_risk_class(9.99) == 5
+    assert compute_discrete_risk_class(10.0) == 6
+    assert compute_discrete_risk_class(13.89) == 6
+    assert compute_discrete_risk_class(13.9) == 7
+    assert compute_discrete_risk_class(25.0) == 7

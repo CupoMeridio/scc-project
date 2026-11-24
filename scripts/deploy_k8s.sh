@@ -62,9 +62,9 @@ kind load docker-image diabetes-api:latest --name "$CLUSTER_NAME"
 # ------------------------------------------------------------------------------
 # STEP 4: INSTALLAZIONE DI NGINX INGRESS CONTROLLER
 # ------------------------------------------------------------------------------
-# kubectl apply -f <URL>: Scarica e applica il manifest ufficiale del controller NGINX ottimizzato per KinD.
-echo "[+] Step 4: Installazione di NGINX Ingress Controller per KinD..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+# kubectl apply -f <URL>: Scarica e applica il manifest ufficiale del controller NGINX ottimizzato per KinD (release stabile pinnata v1.12.0).
+echo "[+] Step 4: Installazione di NGINX Ingress Controller per KinD (v1.12.0)..."
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
 
 # kubectl wait: Mette in pausa l'esecuzione dello script finché una condizione non si avvera:
 # - --namespace ingress-nginx: Cerca nel namespace dove risiede NGINX.
@@ -77,21 +77,50 @@ kubectl wait --namespace ingress-nginx \
   --selector=app.kubernetes.io/component=controller \
   --timeout=180s
 
-# ABILITAZIONE DELLE ANNOTAZIONI SNIPPET IN NGINX:
-# Per motivi di sicurezza (CVE-2021-25742), le versioni recenti di NGINX Ingress disabilitano di default
-# le annotazioni 'server-snippet' e 'configuration-snippet'.
-# Questo comando aggiorna la ConfigMap di NGINX abilitandole, permettendo l'uso del
-# Rate Limiting e degli Header di sicurezza personalizzati specificati in k8s/ingress.yaml.
-kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge -p '{"data":{"allow-snippet-annotations":"true"}}' 2>/dev/null || true
+# AUTORIZZAZIONE ESPLICITA DEGLI SNIPPET NGINX (TRADE-OFF ARCHITETTURALE):
+# A seguito della CVE-2021-25742, le versioni moderne di Ingress-NGINX disabilitano di default
+# le annotazioni 'server-snippet' e 'configuration-snippet' classificandole come 'Critical'
+# poiché consentono l'esecuzione di configurazioni NGINX arbitrarie da parte degli utenti.
+# Nel nostro cluster didattico monoutente, autorizziamo esplicitamente l'esecuzione di snippet
+# patchando la ConfigMap con 'allow-snippet-annotations: true' e 'annotations-risk-level: Critical'
+# per poter iniettare il filtro dei metodi HTTP (405) e gli header difensivi OWASP.
+# In un cluster di produzione multi-tenant, si raccomanda l'uso di impostazioni globali del controller
+# per preservare la mitigazione della vulnerabilità.
+echo "[+] Configurazione ConfigMap NGINX Ingress (autorizzazione snippet, annotations-risk-level: Critical)..."
+kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge \
+  -p '{"data":{"allow-snippet-annotations":"true","annotations-risk-level":"Critical"}}' || {
+  echo "[!] Avviso: patch della ConfigMap ingress-nginx-controller non riuscita."
+}
 
 # ------------------------------------------------------------------------------
-# STEP 5: APPLICAZIONE DEI MANIFEST APPLICATIVI (Passo H della traccia)
+# STEP 5: CREAZIONE SEGRETO TLS E APPLICAZIONE DEI MANIFEST (Passo H della traccia)
 # ------------------------------------------------------------------------------
+# MOTIVAZIONE DI SICUREZZA (HIPAA & GDPR Art. 32):
+# I certificati e le chiavi private non devono mai essere inclusi in chiaro nel repository git.
+# Se non già presente, generiamo un certificato TLS autofirmato sicuro per localhost con SAN ed EKU.
+if ! kubectl get secret diabetes-tls-cert >/dev/null 2>&1; then
+  echo "[+] Generazione certificato TLS autofirmato sicuro per localhost con SAN..."
+  TMP_KEY=$(mktemp)
+  TMP_CRT=$(mktemp)
+  openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+    -keyout "$TMP_KEY" -out "$TMP_CRT" \
+    -subj "/CN=localhost/O=DiabetesEarlyWarning" \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+    -addext "basicConstraints=CA:FALSE" \
+    -addext "extendedKeyUsage=serverAuth" 2>/dev/null
+  kubectl create secret tls diabetes-tls-cert --cert="$TMP_CRT" --key="$TMP_KEY"
+  rm -f "$TMP_KEY" "$TMP_CRT"
+  echo "[✓] Secret TLS 'diabetes-tls-cert' creato con successo."
+else
+  echo "[✓] Secret TLS 'diabetes-tls-cert' già presente nel cluster."
+fi
+
 # kubectl apply: Applica lo stato desiderato dichiarato nei file YAML:
 # - k8s/deployment.yaml: Crea le 3 repliche del pod con limiti di risorse e probe.
 # - k8s/service.yaml: Crea il bilanciatore di carico interno (ClusterIP).
+# - k8s/pdb.yaml: Garantisce la continuita del servizio (minimo 2 repliche attive).
 # - k8s/ingress.yaml: Crea le regole di routing e sicurezza di NGINX verso il Service.
-echo "[+] Step 5: Applicazione di Deployment, Service, PDB e Ingress..."
+echo "[+] Applicazione di Deployment, Service, PDB e Ingress..."
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
 kubectl apply -f k8s/pdb.yaml

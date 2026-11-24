@@ -39,6 +39,26 @@ if ! command -v wrk &> /dev/null; then
     exit 1
 fi
 
+# PRE-FLIGHT CHECK: Verifica che l'endpoint sia raggiungibile e risponda con HTTP 200 OK
+# Se NGINX rispondesse con 308 Permanent Redirect o 503, blocchiamo il test per evitare falsi esiti SLA.
+echo "[+] Verifica pre-flight su $TARGET_HOST/predict..."
+PREFLIGHT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$TARGET_HOST/predict" \
+  -H "Content-Type: application/json" \
+  -d '{"patient_id":"PREFLIGHT","glucose_history":[4.2,4.0,3.8,3.6,3.5,3.7,3.9,4.3,5.0,5.5,6.1,6.7,7.3],"exogenous_inputs":[3.6,0.0,3.8,0.0,3.9,0.0,4.1,0.0,4.2,0.0,4.3,0.0,4.5,0.0]}' || echo "000")
+
+if [ "$PREFLIGHT_STATUS" = "308" ]; then
+    echo "[-] ERRORE CRITICO PRE-FLIGHT: Ricevuto HTTP 308 Permanent Redirect."
+    echo "    NGINX sta reindirizzando il traffico HTTP verso HTTPS."
+    echo "    Verificare che 'nginx.ingress.kubernetes.io/ssl-redirect: \"false\"' sia configurato in k8s/ingress.yaml"
+    echo "    oppure eseguire lo stress test specificando un target HTTPS: ./scripts/run_stress_test.sh https://localhost"
+    exit 1
+elif [ "$PREFLIGHT_STATUS" != "200" ]; then
+    echo "[-] ERRORE PRE-FLIGHT: L'endpoint /predict ha risposto con codice HTTP $PREFLIGHT_STATUS (atteso 200 OK)."
+    echo "    Assicurarsi che il cluster KinD e i pod dell'API siano operativi (make deploy)."
+    exit 1
+fi
+echo "[✓] Pre-flight completato con successo (HTTP 200 OK)."
+
 # mktemp: Crea un file temporaneo sicuro e univoco (es. /tmp/tmp.1234abcd) per catturare l'output testuale di wrk
 TMP_OUTPUT=$(mktemp)
 

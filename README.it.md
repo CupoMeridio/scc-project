@@ -15,7 +15,7 @@
 > **[Consulta la traccia ufficiale del progetto](traccia.pdf)** per i requisiti accademici e i vincoli di consegna completi.
 
 ### Le Tre Opzioni della Traccia Ufficiale:
-1. **Opzione 1:** Previsione dell'assunzione di insulina per pazienti affetti da Diabete di Tipo 1 (*Time Series Forecasting*).
+1. **Opzione 1:** Monitoraggio predittivo e allerta precoce per pazienti con Diabete di Tipo 1 (*Time Series Forecasting* & *Clinical Risk Classification*). *(Nota SaMD: come chiarito dal docente, il dosaggio farmacologico di insulina è responsabilità esclusiva del medico; il sistema SaaS agisce da Early Warning System predicendo la glicemia a 30 minuti $G(t+6)$ e classificando il rischio su 7 fasce cliniche sul dataset reale OhioT1DM).*
 2. **Opzione 2:** Discriminazione tra soggetti sani e pazienti affetti da Parkinson (*Classificazione*).
 3. **Opzione 3:** Discriminazione tra soggetti sani e pazienti affetti da Alzheimer (*Classificazione*).
 
@@ -24,7 +24,7 @@
 > Poiché i dataset definitivi non sono stati ancora rilasciati e l'assegnazione finale potrebbe essere libera o guidata, in questa **Fase di Costruzione dell'Infrastruttura** è stata adottata l'**Opzione 1 (Diabete di Tipo 1)** come **caso d'uso prototipale di riferimento**.
 >
 > **Motivazione dell'Opzione 1 per il Collaudo Iniziale:**
-> - Impone vincoli architetturali più stringenti: la natura sequenziale dei dati (*Time Series*) e la criticità dei dosaggi consentono di testare la validazione temporale `[12 x 3]`, il runtime ONNX e i **Safety Guardrails** clinici applicativi (Clamp a 20.0 IU).
+> - Impone vincoli architetturali più stringenti: la natura sequenziale dei dati (*Time Series*) e la criticità clinica consentono di testare la validazione temporale (13 passi di glucosio + 14 esogeni), il runtime ONNX e i **Safety Guardrails** fisiologici applicativi (Clamp [1.0, 35.0] mmol/L e 7 classi di rischio).
 > - L'SLA dell'Opzione 1 (servizio attivo 7 giorni su 7, 6:00-22:00) è il più restrittivo e include pienamente le finestre operative delle Opzioni 2 e 3 (attive solo dal lunedì al venerdì, 8:00-18:00).
 >
 > **Garanzia di Portabilità Domain-Agnostic (Plug-and-Play):**<br>
@@ -34,8 +34,8 @@
 ### Mappa dell'Architettura: dai Dati alla Risposta
 
 ```text
-train_mock_model.py
-  genera dati sintetici e compila il grafo del modello
+train_lstm.py
+  addestra la rete ricorrente sui dati reali OhioT1DM ed esporta il modello
         ↓ model.onnx + model_metadata.json
 Dockerfile
   compila l'immagine container minimale e sicura (non-root)
@@ -43,13 +43,13 @@ Dockerfile
 Deployment → gestisce 3 repliche del pod con anti-affinity multi-nodo
         ↓
 Ingress NGINX → Service (ClusterIP) → Pod FastAPI
-                                        middleware → validazione Pydantic [12 x 3]
+                                        middleware → validazione Pydantic [13 G + 14 Exog]
                                                    → inferenza ONNX Runtime C++
-                                                   → safety clamp (<= 20.0 IU)
+                                                   → physiological clamp ([1.0, 35.0] mmol/L) & risk class (1..7)
                                                    → risposta JSON + X-Request-ID
 ```
 
-Il **Deployment** mantiene 3 repliche distribuite sui nodi worker; il **Service** fornisce un punto di accesso interno stabile; l'**Ingress NGINX** perimetra il cluster applicando rate limiting e instradamento. All'interno del container, il **middleware** misura la latenza e inietta header OWASP, **Pydantic** valida la matrice temporale e l'endpoint **/predict** esegue l'inferenza proteggendo l'output con il safety clamp clinico.
+Il **Deployment** mantiene 3 repliche distribuite sui nodi worker; il **Service** fornisce un punto di accesso interno stabile; l'**Ingress NGINX** perimetra il cluster applicando rate limiting e instradamento. All'interno del container, il **middleware** misura la latenza e inietta header OWASP, **Pydantic** valida la sequenza temporale e l'endpoint **/predict** esegue l'inferenza proteggendo l'output con il guardrail fisiologico e determinando la classe di rischio clinico.
 
 ---
 
@@ -59,7 +59,7 @@ La traccia ufficiale dell'esame definisce 8 compiti sequenziali. La tabella segu
 
 | Task Traccia | Descrizione Formale del Requisito | Comando Linux/macOS (Make) | Comando Windows (PowerShell) | File Chiave |
 | :--- | :--- | :--- | :--- | :--- |
-| **Task A** | Addestramento offline del modello ML | `make train` | `.\venv\Scripts\python.exe model/train_mock_model.py` | [`model/train_mock_model.py`](model/train_mock_model.py) |
+| **Task A** | Addestramento offline del modello ML | `make train` | `.\venv\Scripts\python.exe model/train_lstm.py` | [`model/train_lstm.py`](model/train_lstm.py) |
 | **Task B** | Salvataggio artefatto e costruzione Web App per inferenza | `make test` | `.\venv\Scripts\pytest.exe tests/ -v` | [`app/main.py`](app/main.py), [`app/schemas.py`](app/schemas.py) |
 | **Task C** | Containerizzazione hardened con Docker Desktop | `make build` | `docker build -t diabetes-api:latest -f docker/Dockerfile .` | [`docker/Dockerfile`](docker/Dockerfile) |
 | **Task D & E** | Analisi vulnerabilità CVE e patching con Docker Scout | `make scan` | `docker scout cves diabetes-api:latest` | [`docker/Dockerfile`](docker/Dockerfile) |
@@ -106,7 +106,7 @@ make train
 ```
 
 #### Passo 4: Esecuzione dei test automatizzati (Task B)
-Verifica dei contratti dell'API, della forma della matrice $[12 \times 3]$ e del rifiuto di valori NaN/Inf:
+Verifica dei contratti dell'API, della forma del payload clinico (13 campioni di glucosio e 14 variabili esogene) e del rifiuto di valori non validi o NaN/Inf:
 ```bash
 make test
 ```
@@ -250,11 +250,11 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 
 ### Decisioni Ingegneristiche Chiave:
 1. **FastAPI + Uvicorn + ONNX Runtime:**
-   L'esportazione del grafo da PyTorch a formato standard ONNX consente l'esecuzione ad alte prestazioni su CPU tramite ONNX Runtime C++, eliminando l'overhead di memoria del framework PyTorch in produzione (riduzione da ~800 MB a <100 MB di footprint) e garantendo latenze di inferenza sub-millisecondo ampiamente conformi all'SLA (< 1.0 s).
-2. **Repliche e Alta Disponibilità Kubernetes:**
-   La distribuzione di 3 repliche pod su 2 nodi worker tramite `podAntiAffinity` elimina il Single Point of Failure (SPOF). L'adozione del PodDisruptionBudget (PDB con `minAvailable: 2`) e della strategia di `RollingUpdate` (`maxSurge: 1`, `maxUnavailable: 0`) garantisce l'alta disponibilità continua e l'aggiornamento a zero-downtime, rispettando l'obiettivo di uptime del 99.5%.
-3. **NGINX Ingress come Perimetro di Sicurezza:**
-   Configurato come gateway perimetrale con Rate Limiting (150 RPS con burst 3x per supportare gateway NAT ospedalieri e picchi SLA), Connection Limiting (50 connessioni per IP contro Slowloris), restrizione verbi HTTP (solo GET e POST) e iniezione di header di sicurezza OWASP, proteggendo il perimetro del cluster prima che il traffico raggiunga il Service ClusterIP interno.
+   L'esportazione del grafo da PyTorch a formato standard ONNX consente l'esecuzione ad alte prestazioni su CPU tramite ONNX Runtime C++, riducendo sensibilmente l'overhead di memoria ed eliminando il peso del runtime di addestramento PyTorch in produzione, garantendo tempi di elaborazione ampiamente conformi all'SLA (< 1.0 s).
+2. **Repliche e Resilienza Pod Kubernetes:**
+   La distribuzione di 3 repliche pod su 2 nodi worker tramite `podAntiAffinity` (preferred) massimizza la ridondanza applicativa. L'adozione del PodDisruptionBudget (PDB con `minAvailable: 2`) e della strategia di `RollingUpdate` (`maxSurge: 1`, `maxUnavailable: 0`) garantisce l'alta disponibilità continua e l'aggiornamento a zero-downtime, rispettando l'obiettivo di uptime del 99.5%.
+3. **NGINX Ingress come Perimetro di Sicurezza & Terminazione TLS:**
+   Configurato come gateway perimetrale con Rate Limiting (1000 RPS con burst 5x per supportare lo stress test locale con wrk ed evitare falsi positivi 429), Connection Limiting (150 connessioni per IP contro Slowloris), terminazione TLS su porta 443 con certificato e chiave generati on-the-fly con SAN (`DNS:localhost, IP:127.0.0.1`), direttiva `ssl-redirect: "false"` per consentire test HTTP/HTTPS diretti senza conflitti 308, restrizione verbi HTTP (solo GET e POST) e iniezione di header di sicurezza OWASP.
 
 ---
 
@@ -265,18 +265,19 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 | **Container Non-Root** | Previene Container Breakout ed escalation dei privilegi sul nodo host. | `USER 10001:10001` in Dockerfile, `runAsNonRoot: true` in K8s Pod Security Context. |
 | **Multi-Stage Build** | Riduce la superficie d'attacco; compilatori e strumenti di build sono esclusi dall'immagine finale. | Dockerfile a doppio stadio (`builder` -> `runner`), base image `python:3.11-slim`. |
 | **Scansione CVE con Docker Scout** | Identifica Common Vulnerabilities and Exposures nel sistema operativo e nelle librerie Python prima del rilascio. | `docker scout cves` & `docker scout quickview`. |
-| **Rate Limiting** | Previene attacchi Denial of Service (DoS) e garantisce la corretta ripartizione della capacità tra client concorrenti. | `nginx.ingress.kubernetes.io/limit-rps: "150"`, `limit-burst-multiplier: "3"`. |
-| **Connection Limiting** | Mitiga attacchi Slowloris e l'esaurimento della tabella dei socket/connessioni sul gateway. | `nginx.ingress.kubernetes.io/limit-connections: "50"`. |
+| **Rate Limiting** | Previene attacchi Denial of Service (DoS) e garantisce la corretta ripartizione della capacità tra client concorrenti. | `nginx.ingress.kubernetes.io/limit-rps: "1000"`, `limit-burst-multiplier: "5"`. |
+| **Connection Limiting** | Mitiga attacchi Slowloris e l'esaurimento della tabella dei socket/connessioni sul gateway. | `nginx.ingress.kubernetes.io/limit-connections: "150"`. |
+| **Terminazione TLS / HTTPS** | Cifratura end-to-end dei dati biometrici in transito (HIPAA & GDPR Art. 32). | Secret `diabetes-tls-cert` su porta 443, certificato con SAN `DNS:localhost, IP:127.0.0.1`. |
 | **Dimensione Massima Body HTTP** | Previene attacchi di esaurimento memoria (Memory Starvation) dato che il payload clinico pesa < 2 KB. | `nginx.ingress.kubernetes.io/proxy-body-size: "1m"`. |
 | **Restrizione Metodi HTTP** | Principio del Minimo Privilegio: sono ammessi solo `GET` (health/ready) e `POST` (predict). | NGINX snippet: `if ($request_method !~ ^(GET|POST|HEAD)$) { return 405; }`. |
 | **Header HTTP OWASP** | Difesa in profondità (Defense-in-Depth) per imporre standard moderni di sicurezza HTTP. | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`. |
 | **Quote di Risorse K8s** | Previene attacchi DoS interni e monopolio delle risorse CPU/RAM sul nodo host (Noisy Neighbor). | Limiti container: `cpu: 500m`, `memory: 256Mi`. |
 
 ### 5.1 Validazione dei Dati e Ciclo di Vita del Modello
-- **Contratto dell'Input:** Pydantic v2 garantisce l'integrità strutturale della serie temporale `[12 x 3]`, bloccando valori fuori range fisiologico e valori non numerici (`NaN`, `Inf`) con `HTTP 422 Unprocessable Entity` prima dell'esecuzione dell'algebra lineare.
-- **Safety Clamp Clinico:** L'output è vincolato rigidamente dal parametro `MAX_INSULIN_DOSE` (default `20.0 IU`) per prevenire somministrazioni eccessive in caso di anomalie dei sensori.
-- **Readiness Gate:** In modalità `MODEL_MODE=real`, `/ready` restituisce `HTTP 503 Service Unavailable` se la sessione ONNX non è caricata in memoria, escludendo il pod dal routing prima di generare errori utente.
-- **Tracciabilità e Checksum SHA256:** I pesi del modello sono associati a un hash crittografico SHA256 verificabile archiviato nel file di audit `model/model_metadata.json`.
+- **Contratto dell'Input:** Pydantic v2 garantisce l'integrità strutturale della serie temporale (13 misurazioni di glucosio in mmol/L e 14 variabili esogene), bloccando valori fuori range fisiologico e valori non numerici (`NaN`, `Inf`) con `HTTP 422 Unprocessable Entity` prima dell'esecuzione dell'algebra lineare.
+- **Safety Clamp Fisiologico & Early Warning:** L'output è vincolato nel range vitale $[1.0, 35.0]\text{ mmol/L}$ e categorizzato su 7 classi di rischio per allertare il paziente in anticipo su ipo/iperglicemie.
+- **Readiness Gate Fail-Closed:** `/ready` restituisce `HTTP 503 Service Unavailable` se la sessione ONNX o i parametri di normalizzazione dello scaler non sono caricati e validati in memoria, escludendo il pod dal routing prima di generare errori utente.
+- **Supply Chain Security & Checksum SHA256:** Gli artefatti `model.onnx` e `model.onnx.data` sono verificati all'avvio confrontando l'impronta crittografica SHA256 con quella archiviata in `model/model_metadata.json`.
 
 ---
 
@@ -286,7 +287,7 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 scc-project/
 ├── traccia.pdf              # Traccia ufficiale del progetto d'esame
 ├── docs/
-│   └── feature_spec.md      # Specifiche tecniche formali del contratto dati [12 x 3]
+│   └── feature_spec.md      # Specifiche tecniche formali del contratto dati OhioT1DM
 ├── .gitattributes           # Normalizzazione terminatori di riga (LF per Linux, CRLF per PowerShell)
 ├── .gitignore               # Esclusione cache, venv e file temporanei
 ├── Makefile                 # Automazione per Linux/macOS (Single Source of Truth)
@@ -294,11 +295,11 @@ scc-project/
 ├── requirements-train.txt   # Dipendenze offline per l'addestramento (PyTorch, ONNX)
 ├── requirements-test.txt    # Dipendenze per la suite di test (pytest, httpx)
 ├── app/
-│   ├── main.py              # API FastAPI con runtime ONNX, safety clamp e probe rigorosi
-│   ├── config.py            # Configurazioni via variabili d'ambiente (MODEL_MODE, MAX_DOSE)
+│   ├── main.py              # API FastAPI con runtime ONNX fail-closed, early warning e probe rigorosi
+│   ├── config.py            # Configurazioni via variabili d'ambiente (Twelve-Factor App)
 │   └── schemas.py           # Validazione Pydantic v2 (range fisiologici, anti-NaN/Inf)
 ├── model/
-│   ├── train_mock_model.py  # Script addestramento offline, metriche ed export ONNX
+│   ├── train_lstm.py        # Script addestramento offline, metriche ed export ONNX
 │   ├── model_metadata.json  # Metadati, versione, architettura e SHA256 checksum
 │   └── model.onnx           # Artefatto modello esportato
 ├── docker/
@@ -309,7 +310,7 @@ scc-project/
 │   ├── deployment.yaml      # 3 repliche richieste, probe e strategia di aggiornamento graduale
 │   ├── pdb.yaml             # PodDisruptionBudget (minAvailable: 2) per interruzioni volontarie
 │   ├── service.yaml         # ClusterIP interno
-│   └── ingress.yaml         # Ingress NGINX con rate limiting (150 rps) e security headers
+│   └── ingress.yaml         # Ingress NGINX con rate limiting (1000 rps), TLS e security headers
 ├── tests/
 │   └── test_api.py          # Test automatizzati con pytest su health, ready e predict
 └── scripts/
@@ -317,7 +318,7 @@ scc-project/
     ├── setup_host_macos.sh  # Setup macOS tramite Homebrew
     ├── setup_env.sh / .ps1  # Gestore VENV: profili CPU, CUDA e ROCm secondo piattaforma
     ├── deploy_k8s.sh / .ps1 # Deployment automatico idempotente (rollout restart)
-    ├── run_stress_test.sh / .ps1 # wrk: confronto soglie su Linux/macOS, manuale su Windows
+    ├── run_stress_test.sh / .ps1 # wrk: validazione e certificazione vincoli SLA (Linux/macOS/Windows)
     └── test_predict.lua     # Script Lua che genera payload dimostrativi per wrk
 ```
 

@@ -98,10 +98,14 @@ spec:
       # containers: Lista dei container che compongono il pod (1 solo container per pod)
       containers:
         - name: api # Nome del container all'interno del pod
-          # image: Nome e tag dell'immagine Docker da eseguire
+          # image: Nome e tag dell'immagine Docker da eseguire.
+          # NOTA SUL VERSIONING IMMAGINI (KinD vs Produzione):
+          # In ambiente KinD locale, 'diabetes-api:latest' combinato con 'imagePullPolicy: IfNotPresent'
+          # e 'kubectl rollout restart' consente di caricare le compilazioni locali direttamente
+          # nei nodi senza necessitare di un registry remoto esterno. In un deployment di produzione
+          # multi-tenant si utilizzano tag semantici immutabili (es. :1.0.0 o SHA del commit).
           image: diabetes-api:latest
           # imagePullPolicy: IfNotPresent -> Cerca l'immagine nella cache locale del nodo.
-          # Configurazione necessaria per KinD, consentendo l'uso dell'immagine locale caricata nel nodo senza tentare il pull remoto.
           imagePullPolicy: IfNotPresent
           
           # ports: Documenta le porte di rete esposte dal container
@@ -118,13 +122,6 @@ spec:
               value: "0.0.0.0"
             - name: LOG_LEVEL
               value: "INFO"
-            # MODEL_MODE: "real" -> Obbliga l'applicazione a funzionare solo col modello ONNX reale.
-            # Se il modello manca, la readiness probe restituirà 503 impedendo il disservizio silenzioso.
-            - name: MODEL_MODE
-              value: "real"
-            # MAX_INSULIN_DOSE: "20.0" -> Tetto massimo clinico insuperabile (Safety Clamp)
-            - name: MAX_INSULIN_DOSE
-              value: "20.0"
 
           # --------------------------------------------------------------------
           # 3. CONTAINER SECURITY CONTEXT (Principio del Minimo Privilegio)

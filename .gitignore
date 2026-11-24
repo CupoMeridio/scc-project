@@ -1,12 +1,55 @@
-# Byte-compiled / optimized / DLL files
+# ==============================================================================
+# FILE: .gitignore
+# RUOLO: Esclusione dal tracciamento Git di file temporanei, archivi binari pesanti,
+#        chiavi crittografiche, cache di compilazione e file di sistema operativo.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. FILE COMPOSTI & ARCHIVI COMPRESSI (Prevenzione duplicazione binaria)
+# ------------------------------------------------------------------------------
+# Il dataset OhioT1DM e gia estratto e versionato in chiaro in Diabetes/GlucoseClassification/
+# I file zip o tar compressi non devono essere duplicati nel repository (risparmio ~10MB).
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.bz2
+*.xz
+
+# ------------------------------------------------------------------------------
+# 2. CHIAVI CRITTOGRAFICHE, CERTIFICATI E SEGRETI (HIPAA & GDPR Art. 32)
+# ------------------------------------------------------------------------------
+# Le chiavi private e i certificati TLS sono generati dinamicamente a runtime
+# durante il deployment locale e non devono MAI essere versionati nel repository Git.
+*.key
+*.crt
+*.pem
+*.cer
+*.p12
+*.pfx
+k8s/tls-secret.yaml
+.env
+.env.*
+!.env.example
+
+# ------------------------------------------------------------------------------
+# 3. BYTECODE PYTHON & CACHE DI COMPILAZIONE
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
-# Distribution / packaging
+# ------------------------------------------------------------------------------
+# 4. AMBIENTI VIRTUALI PYTHON
+# ------------------------------------------------------------------------------
+venv/
+.venv/
+.venvs/
+env/
+ENV/
 .Python
 build/
 develop-eggs/
@@ -24,24 +67,59 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environments
-venv/
-.venv/
-.venvs/
-env/
-ENV/
-
-# Testing & Coverage
+# ------------------------------------------------------------------------------
+# 5. TESTING, COVERAGE & PROFILING
+# ------------------------------------------------------------------------------
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.ruff_cache/
+.mypy_cache/
 
-# IDE & Editors
-.idea/
-.vscode/
+# ------------------------------------------------------------------------------
+# 6. JUPYTER NOTEBOOKS & ANALISI DATI
+# ------------------------------------------------------------------------------
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Output esplorativi del dataset: NON servono né al training né al serving.
+# I 24 CSV <patient>-ws-{training,testing}(t+30).csv restano versionati.
+Diabetes/**/*.png
+Diabetes/**/*_classes.txt
+Diabetes/ohio_analysis/
+Diabetes/*.ipynb
+
+# Checkpoint PyTorch: riproducibile con `make train`; non serve a runtime.
+model/*.pt
+
+# ------------------------------------------------------------------------------
+# 7. LOG E FILE TEMPORANEI EFFIMERI
+# ------------------------------------------------------------------------------
+*.log
+*.tmp
+_tmp*
+*.bak
 *.swp
 *.swo
+*~
+*.pid
 
-# OS files
+# ------------------------------------------------------------------------------
+# 8. CONFIGURAZIONI IDE & EDITORI
+# ------------------------------------------------------------------------------
+.idea/
+.vscode/
+
+# ------------------------------------------------------------------------------
+# 9. FILE DI SISTEMA OPERATIVO (Windows / macOS)
+# ------------------------------------------------------------------------------
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+ehthumbs_vista.db
 Thumbs.db
+[Dd]esktop.ini

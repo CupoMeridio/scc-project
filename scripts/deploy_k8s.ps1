@@ -63,8 +63,8 @@ kind load docker-image diabetes-api:latest --name $ClusterName
 # ------------------------------------------------------------------------------
 # STEP 4: INSTALLAZIONE DI NGINX INGRESS CONTROLLER
 # ------------------------------------------------------------------------------
-Write-Host "[+] Step 4: Installazione di NGINX Ingress Controller..." -ForegroundColor Yellow
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+Write-Host "[+] Step 4: Installazione di NGINX Ingress Controller (v1.12.0)..." -ForegroundColor Yellow
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
 
 # Attesa del completamento dell'avvio del pod controller prima di procedere con i manifest applicativi.
 # Il carattere backtick (`) rappresenta il carattere di continuazione riga in PowerShell.
@@ -74,12 +74,71 @@ kubectl wait --namespace ingress-nginx `
   --selector=app.kubernetes.io/component=controller `
   --timeout=180s
 
-# Abilitazione delle annotazioni snippet di sicurezza in NGINX Ingress (CVE-2021-25742 mitigation)
-kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge -p '{"data":{"allow-snippet-annotations":"true"}}' 2>$null
+# AUTORIZZAZIONE ESPLICITA DEGLI SNIPPET NGINX (TRADE-OFF ARCHITETTURALE):
+# A seguito della CVE-2021-25742, Ingress-NGINX disabilita di default 'server-snippet' e
+# 'configuration-snippet' classificandoli 'Critical'. Nel nostro ambiente di collaudo monoutente,
+# autorizziamo esplicitamente gli snippet nella ConfigMap (annotations-risk-level: Critical)
+# per applicare il filtro sui metodi HTTP non ammessi (405) e gli header difensivi OWASP.
+Write-Host "[+] Configurazione ConfigMap NGINX Ingress (autorizzazione snippet, annotations-risk-level: Critical)..." -ForegroundColor Yellow
+$patchJson = '{"data":{"allow-snippet-annotations":"true","annotations-risk-level":"Critical"}}'
+kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge -p $patchJson
 
 # ------------------------------------------------------------------------------
-# STEP 5: APPLICAZIONE DEI MANIFEST APPLICATIVI (Passo H della traccia)
+# STEP 5: CREAZIONE SEGRETO TLS E APPLICAZIONE MANIFEST APPLICATIVI (Passo H)
 # ------------------------------------------------------------------------------
+# MOTIVAZIONE DI SICUREZZA (HIPAA & GDPR Art. 32):
+# I certificati e le chiavi private NON devono mai essere committati in chiaro nel repository git.
+# Questo passaggio genera dinamicamente un certificato X.509 autofirmato valido per 'localhost'
+# con Subject Alternative Name (SAN: DNS:localhost, IP:127.0.0.1) ed Extended Key Usage (serverAuth).
+$tlsSecretExists = kubectl get secret diabetes-tls-cert 2>$null
+if (-not $tlsSecretExists) {
+    Write-Host "[+] Generazione certificato TLS autofirmato sicuro per localhost con SAN..." -ForegroundColor Yellow
+    $tempKey = [System.IO.Path]::GetTempFileName()
+    $tempCrt = [System.IO.Path]::GetTempFileName()
+    try {
+        # Ricerca robusta dell'eseguibile OpenSSL nel PATH o nelle cartelle applicative standard di Windows
+        $opensslCmd = $null
+        $found = Get-Command openssl -ErrorAction SilentlyContinue
+        if ($found) {
+            $opensslCmd = $found.Source
+        } else {
+            $candidatePaths = @(
+                "C:\Program Files\Git\usr\bin\openssl.exe",
+                "C:\cygwin64\bin\openssl.exe",
+                "C:\Program Files\OpenSSL-Win64\bin\openssl.exe",
+                "C:\ProgramData\chocolatey\bin\openssl.exe"
+            )
+            foreach ($cand in $candidatePaths) {
+                if (Test-Path $cand) {
+                    $opensslCmd = $cand
+                    break
+                }
+            }
+        }
+
+        if ($opensslCmd) {
+            & $opensslCmd req -x509 -newkey rsa:2048 -nodes -days 365 `
+                -keyout $tempKey -out $tempCrt `
+                -subj "/CN=localhost/O=DiabetesEarlyWarning" `
+                -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" `
+                -addext "basicConstraints=CA:FALSE" `
+                -addext "extendedKeyUsage=serverAuth" 2>$null
+            kubectl create secret tls diabetes-tls-cert --cert=$tempCrt --key=$tempKey
+            Write-Host "[✓] Secret TLS 'diabetes-tls-cert' creato con successo tramite OpenSSL ($opensslCmd)." -ForegroundColor Green
+        } else {
+            Write-Host "[-] ERRORE BLOCCANTE: Impossibile generare il Secret TLS 'diabetes-tls-cert'." -ForegroundColor Red
+            Write-Host "    OpenSSL non e stato rilevato nel sistema. Per completare il deployment:" -ForegroundColor Yellow
+            Write-Host "    1. Installare Git for Windows (include OpenSSL in 'C:\Program Files\Git\usr\bin'), oppure"
+            Write-Host "    2. Eseguire: winget install ShiningLight.OpenSSL"
+            exit 1
+        }
+    } finally {
+        Remove-Item -Path $tempKey, $tempCrt -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Write-Host "[✓] Secret TLS 'diabetes-tls-cert' gia presente nel cluster." -ForegroundColor Green
+}
+
 # k8s/deployment.yaml: definisce 3 repliche del pod, risorse garantite e sonde.
 # k8s/service.yaml: definisce il bilanciatore di carico interno (ClusterIP).
 # k8s/pdb.yaml: garantisce un minimo di 2 repliche costantemente disponibili (SLA 99.5%).
@@ -106,4 +165,4 @@ kubectl get pods -o wide
 
 Write-Host "`nPer testare gli endpoint in PowerShell:" -ForegroundColor Yellow
 Write-Host "  Invoke-RestMethod -Uri http://localhost/health"
-Write-Host "  Invoke-RestMethod -Uri http://localhost/predict -Method POST -ContentType 'application/json' -Body '{\`"features\`": [[110,0,0],[112,0,0],[115,0,0],[120,0,0],[130,50,0],[150,0,0],[170,0,0],[165,0,0],[155,0,0],[145,0,0],[135,0,0],[130,0,0]]}'"
+Write-Host "  Invoke-RestMethod -Uri http://localhost/predict -Method POST -ContentType 'application/json' -Body '{\`"patient_id\`":\`"PATIENT_DEMO\`",\`"glucose_history\`":[4.2,4.0,3.8,3.6,3.5,3.7,3.9,4.3,5.0,5.5,6.1,6.7,7.3],\`"exogenous_inputs\`":[3.6,0.0,3.8,0.0,3.9,0.0,4.1,0.0,4.2,0.0,4.3,0.0,4.5,0.0]}'"

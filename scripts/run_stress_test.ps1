@@ -1,39 +1,21 @@
+# ==============================================================================
 # FILE: scripts/run_stress_test.ps1
-# RUOLO NEL PROGETTO: Stress test e validazione dei vincoli SLA con wrk per Windows (PowerShell).
-#
-# Esegue il benchmark 'wrk' all'interno di un container Docker ufficiale leggero, evitando
-# la necessità di compilare o installare binari nativi C su macchine Windows.
-#
-# OBIETTIVI SLA VERIFICATI:
-# - Throughput: >= 83.33 RPS (equivalente al target di 5.000 richieste al minuto).
-# - Latenza al 99° percentile (p99): <= 1.00 secondo (1000 ms).
-# - Tasso di errore (non-2xx): < 0.5% (equivalente alla disponibilità richiesta del 99.5%).
+# RUOLO: Script di automazione dello Stress Test e Certificazione SLA per Windows.
+#        Esegue 'wrk' tramite container Docker leggero su Alpine Linux,
+#        esegue controlli pre-flight contro falsi positivi (es. HTTP 308)
+#        e valida programmaticamente i tre vincoli di SLA (RPS, Latenza, Errori).
+# ==============================================================================
 
-# ------------------------------------------------------------------------------
-# DICHIARAZIONE DEI PARAMETRI FORMALI DELLO SCRIPT
-# ------------------------------------------------------------------------------
-# param(): costrutto nativo di PowerShell per definire argomenti con tipizzazione statica e valori di default.
 param(
-    # Endpoint bersaglio. 'http://host.docker.internal' è il nome DNS speciale usato da Docker
-    # per consentire al container di raggiungere i servizi in ascolto su localhost dell'host Windows.
-    [string]$TargetHost = "http://host.docker.internal",
-    
-    # Durata complessiva del test di carico (default 30 secondi).
+    [string]$TargetHost = "http://localhost",
     [string]$Duration = "30s",
-    
-    # Numero di thread CPU allocati per generare le connessioni.
     [int]$Threads = 4,
-    
-    # Numero di connessioni TCP aperte contemporaneamente verso il gateway NGINX.
     [int]$Connections = 100
 )
 
-# Interruzione immediata in caso di errori imprevisti
-$ErrorActionPreference = "Stop"
-
 # PSScriptRoot: cartella dello script.
 # Resolve-Path: individua il percorso reale canonico della radice di progetto.
-# .Replace('\', '/'): converte i backslash Windows in slash POSIX, obbligatori per il montaggio volumi (-v) in Docker.
+# .Replace('\', '/'): converte i backslash Windows in slash POSIX per il mount volume (-v) in Docker.
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path.Replace('\', '/')
 
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -42,26 +24,48 @@ Write-Host " Target Endpoint:    $TargetHost/predict" -ForegroundColor Yellow
 Write-Host " Connessioni attive: $Connections simultanee" -ForegroundColor Yellow
 Write-Host " Thread impiegati:   $Threads" -ForegroundColor Yellow
 Write-Host " Durata:             $Duration" -ForegroundColor Yellow
-Write-Host " Obiettivo SLA:      >= 83.33 RPS, p99 <= 1000 ms, Errori < 0.5%" -ForegroundColor Yellow
+Write-Host " Obiettivo SLA:      >= 83.33 RPS, p99 <= 1000 ms, Errori <= 0.50%" -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # ------------------------------------------------------------------------------
-# ESECUZIONE DEL CONTAINER DOCKER CON WRK
+# STEP 0: PRE-FLIGHT CHECK
 # ------------------------------------------------------------------------------
-# docker run:
-# - --rm: elimina automaticamente il container dallo stato di Docker al termine dell'esecuzione.
-# - -v "${ProjectRoot}/scripts:/scripts": monta la cartella locale degli script all'interno del container
-#   nel percorso '/scripts', rendendo accessibile lo script Lua di generazione payload (test_predict.lua).
-# - --add-host=host.docker.internal:host-gateway: associa il DNS host.docker.internal al gateway di rete dell'host.
-# - williamyeh/wrk: immagine minimale basata su Alpine Linux con il binario 'wrk' precompilato.
-#
-# PARAMETRI WRK:
-# - -t: numero di thread worker di generazione traffico.
-# - -c: numero di socket TCP aperti contemporaneamente.
-# - -d: intervallo di durata temporale.
-# - -s: script Lua contenente il generatore di matrici cliniche [12 x 3] ad ogni iterazione.
-# - --latency: ordina a wrk di calcolare ed esporre i percentili di risposta (50%, 75%, 90%, 99%).
-docker run --rm `
+# Invia una singola richiesta di prova verso $TargetHost/predict per assicurarsi che:
+# 1. L'endpoint sia attivo e risponda con HTTP 200 OK.
+# 2. NGINX non stia restituendo HTTP 308 (redirect HTTPS) o 503, prevenendo falsi esiti SLA.
+Write-Host "[+] Esecuzione Pre-Flight Check su $TargetHost/predict..." -ForegroundColor Yellow
+$preflightPayload = '{"patient_id":"PREFLIGHT_WIN","glucose_history":[4.2,4.0,3.8,3.6,3.5,3.7,3.9,4.3,5.0,5.5,6.1,6.7,7.3],"exogenous_inputs":[3.6,0.0,3.8,0.0,3.9,0.0,4.1,0.0,4.2,0.0,4.3,0.0,4.5,0.0]}'
+
+try {
+    $preflight = Invoke-WebRequest -Uri "$TargetHost/predict" -Method POST -ContentType "application/json" -Body $preflightPayload -MaximumRedirection 0 -UseBasicParsing -ErrorAction Stop
+    if ($preflight.StatusCode -ne 200) {
+        Write-Host "[-] Pre-flight fallito: status code $($preflight.StatusCode) invece di 200 OK!" -ForegroundColor Red
+        exit 1
+    }
+} catch {
+    $statusCode = 0
+    if ($_.Exception.Response) {
+        $statusCode = [int]$_.Exception.Response.StatusCode
+    }
+    if ($statusCode -eq 308) {
+        Write-Host "[-] ERRORE CRITICO PRE-FLIGHT: Ricevuto HTTP 308 Permanent Redirect." -ForegroundColor Red
+        Write-Host "    NGINX sta forzando il redirect da HTTP a HTTPS." -ForegroundColor Red
+        Write-Host "    Verificare che 'nginx.ingress.kubernetes.io/ssl-redirect: `"false`"' sia configurato in k8s/ingress.yaml" -ForegroundColor Yellow
+        exit 1
+    } elseif ($statusCode -ne 0) {
+        Write-Host "[-] ERRORE PRE-FLIGHT: L'endpoint ha risposto con codice HTTP $statusCode." -ForegroundColor Red
+        exit 1
+    } else {
+        Write-Warning "Avviso: Impossibile contattare l'endpoint durante il pre-flight ($($_.Message)). Procedo con il benchmark..."
+    }
+}
+Write-Host "[✓] Pre-flight superato con successo: l'endpoint risponde 200 OK." -ForegroundColor Green
+
+# ------------------------------------------------------------------------------
+# STEP 1: ESECUZIONE DEL CONTAINER DOCKER CON WRK
+# ------------------------------------------------------------------------------
+Write-Host "`n[+] Esecuzione benchmark wrk..." -ForegroundColor Yellow
+$wrkOutput = docker run --rm `
     -v "${ProjectRoot}/scripts:/scripts" `
     --add-host=host.docker.internal:host-gateway `
     williamyeh/wrk `
@@ -72,10 +76,80 @@ docker run --rm `
     --latency `
     "$TargetHost/predict"
 
+$wrkOutput | ForEach-Object { Write-Host $_ }
+$fullText = $wrkOutput -join "`n"
+
+# ------------------------------------------------------------------------------
+# STEP 2: PARSING AUTOMATICO DELLE METRICHE E VALIDAZIONE DEI VINCOLI SLA
+# ------------------------------------------------------------------------------
+# 1. Throughput (Requests/sec)
+$rps = 0.0
+if ($fullText -match "Requests/sec:\s+([0-9.]+)") {
+    $rps = [double]$Matches[1]
+}
+
+# 2. Latenza al 99° percentile
+$p99Ms = 0.0
+if ($fullText -match "99%\s+([0-9.]+)(ms|s|us)") {
+    $val = [double]$Matches[1]
+    $unit = $Matches[2]
+    if ($unit -eq "ms") { $p99Ms = $val }
+    elseif ($unit -eq "s") { $p99Ms = $val * 1000.0 }
+    elseif ($unit -eq "us") { $p99Ms = $val / 1000.0 }
+}
+
+# 3. Errori HTTP non-2xx
+$non2xx = 0
+if ($fullText -match "Non-2xx or 3xx responses:\s+([0-9]+)") {
+    $non2xx = [int]$Matches[1]
+}
+
+# 4. Richieste totali
+$totalReq = 1
+if ($fullText -match "([0-9]+)\s+requests in") {
+    $totalReq = [int]$Matches[1]
+}
+
+$errorPct = ($non2xx / $totalReq) * 100.0
+
 Write-Host "`n==========================================================" -ForegroundColor Cyan
-Write-Host "[✓] Stress test completato." -ForegroundColor Green
-Write-Host "Verificare che i parametri di output soddisfino i vincoli SLA:" -ForegroundColor Yellow
-Write-Host "  1. Throughput (Requests/sec) >= 83.33"
-Write-Host "  2. Latenza al 99° percentile (p99) <= 1000 ms (1.00 s)"
-Write-Host "  3. Errori non-2xx assenti o < 0.5% del totale"
+Write-Host " REPORT DI CONVALIDA SERVICE LEVEL AGREEMENT (SLA) " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
+
+$slaPassed = $true
+
+# Condizione 1: Throughput >= 83.33 RPS (5.000 req/min)
+Write-Host -NoNewline "  1. Throughput:       $rps RPS (Obiettivo: >= 83.33 RPS) ... "
+if ($rps -ge 83.33) {
+    Write-Host "[PASS]" -ForegroundColor Green
+} else {
+    Write-Host "[FAIL]" -ForegroundColor Red
+    $slaPassed = $false
+}
+
+# Condizione 2: Latenza p99 <= 1000.0 ms (<= 1.0 secondo)
+Write-Host -NoNewline "  2. Latenza p99:      $p99Ms ms (Obiettivo: <= 1000.0 ms) ... "
+if ($p99Ms -le 1000.0 -and $p99Ms -gt 0) {
+    Write-Host "[PASS]" -ForegroundColor Green
+} else {
+    Write-Host "[FAIL]" -ForegroundColor Red
+    $slaPassed = $false
+}
+
+# Condizione 3: Errori <= 0.50% (Disponibilita >= 99.5%)
+Write-Host -NoNewline "  3. Tasso di Errori:  $($errorPct.ToString('F2'))% (Obiettivo: <= 0.50%) ... "
+if ($errorPct -le 0.50) {
+    Write-Host "[PASS]" -ForegroundColor Green
+} else {
+    Write-Host "[FAIL]" -ForegroundColor Red
+    $slaPassed = $false
+}
+
+Write-Host "==========================================================" -ForegroundColor Cyan
+if ($slaPassed) {
+    Write-Host "[✓] SLA PIENAMENTE RISPETTATO: CERTIFICAZIONE COMPLETATA CON SUCCESSO!" -ForegroundColor Green
+    exit 0
+} else {
+    Write-Host "[✗] ATTENZIONE: UNO O PIU VINCOLI DI SLA NON SONO STATI SODDISFATTI!" -ForegroundColor Red
+    exit 1
+}

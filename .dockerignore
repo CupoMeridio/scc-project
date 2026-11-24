@@ -17,3 +17,7 @@ pip-delete-this-directory.txt
 scripts/
 k8s/
 tests/
+Diabetes/
+model/train_lstm.py
+model/*.pt
+.pytest_cache/

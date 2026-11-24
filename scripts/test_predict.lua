@@ -16,42 +16,32 @@ math.randomseed(os.time())
 -- request(): Funzione speciale predefinita di wrk.
 -- Viene invocata da wrk prima di inviare ciascuna richiesta HTTP per personalizzarne il contenuto.
 request = function()
-    -- math.random(10000, 99999): Genera un numero intero casuale a 5 cifre.
-    -- Simula 50.000 pazienti diversi che effettuano richieste concorrenti (Requisito SLA della traccia).
-    local patient_id = "PATIENT_" .. math.random(10000, 99999)
+    -- math.random(10000, 59999): Genera un numero intero casuale compreso in un pool di 50.000 pazienti
+    -- (PATIENT_10000 .. PATIENT_59999), simulando i 50.000 clienti previsti dalla traccia di esame.
+    local patient_id = "PATIENT_" .. math.random(10000, 59999)
     
-    -- Simula una glicemia casuale compresa tra 120 e 200 mg/dL (120 + numero da 0 a 80).
-    local current_glucose = 120.0 + (math.random(0, 80) * 1.0)
+    -- Simula una glicemia casuale compresa tra 4.5 e 10.5 mmol/L.
+    local current_glucose = 4.5 + (math.random(0, 60) * 0.1)
     
-    -- Simula un'assunzione di carboidrati da 0 a 50 grammi.
-    local recent_carbs = math.random(0, 50) * 1.0
+    -- Simula un bolo di insulina recente (da 0 a 8 U) e carboidrati (da 0 a 60g).
+    local recent_insulin = math.random(0, 8) * 1.0
+    local recent_carbs = math.random(0, 60) * 1.0
 
-    -- string.format(): Formatta una stringa sostituendo i segnaposto:
-    -- - %s: Sostituito dalla stringa patient_id
-    -- - %.1f: Sostituito da un numero in virgola mobile con 1 cifra decimale (es. 145.2)
-    -- Genera la matrice clinica esatta di 12 intervalli temporali con 3 feature per intervallo.
+    -- Genera il payload conforme allo schema OhioT1DM (13 campioni di glucosio in mmol/L + 14 esogeni).
     local payload = string.format([[{
   "patient_id": "%s",
-  "features": [
-    [110.0, 0.0, 0.0],
-    [112.0, 0.0, 0.0],
-    [115.0, 0.0, 0.0],
-    [120.0, 0.0, 0.0],
-    [130.0, 40.0, 0.0],
-    [150.0, 0.0, 0.0],
-    [165.0, 0.0, 0.0],
-    [160.0, 0.0, 0.0],
-    [150.0, 0.0, 0.0],
-    [140.0, 0.0, 0.0],
-    [130.0, 0.0, 0.0],
-    [%.1f, %.1f, 0.0]
-  ]
-}]], patient_id, current_glucose, recent_carbs)
+  "glucose_history": [4.2, 4.0, 3.8, 3.6, 3.5, 3.7, 3.9, 4.3, 5.0, 5.5, 6.1, 6.7, %.1f],
+  "exogenous_inputs": [%.1f, %.1f, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+}]], patient_id, current_glucose, recent_insulin, recent_carbs)
 
-    -- wrk.format(method, path, headers, body): Funzione integrata in wrk che assembla la richiesta HTTP raw:
-    -- - method: "POST"
-    -- - path: "/predict" (l'endpoint sottoposto al carico di richieste)
-    -- - headers: nil (usa gli header globali definiti sopra in wrk.headers)
-    -- - body: payload (la stringa JSON appena formattata)
     return wrk.format("POST", "/predict", nil, payload)
+end
+
+-- response(): Callback eseguito da wrk alla ricezione di ciascuna risposta HTTP.
+-- Ispeziona lo status code e segnala immediatamente su stderr qualsiasi codice diverso da 200 OK
+-- (es. 308 redirect, 429 rate limit o 503 unavailability), prevenendo falsi positivi nei report SLA.
+response = function(status, headers, body)
+    if status ~= 200 then
+        io.stderr:write(string.format("[WRK ATTENZIONE] Ricevuto codice HTTP %d (atteso 200 OK)\n", status))
+    end
 end

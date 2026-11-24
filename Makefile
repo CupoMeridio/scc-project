@@ -35,6 +35,7 @@ help:
 	@echo "  make test-endpoint    - Invia richieste curl di prova (/health e /predict)"
 	@echo "  make stress-test      - Esegue lo stress test wrk con validazione SLA automatica (Passo G)"
 	@echo "  make logs             - Mostra i log aggregati dei pod applicativi"
+	@echo "  make clean            - Rimuove cache Python, file temporanei e log di test"
 	@echo "  make cluster-down     - Distrugge il cluster KinD liberando le risorse del computer"
 
 # 1. SETUP DELL'HOST: Esecuzione dello script con privilegi di amministratore per configurare l'ambiente
@@ -70,7 +71,7 @@ env-auto:
 
 # 2. ADDESTRAMENTO OFFLINE: Esegue lo script Python per allenare la LSTM ed esportare model.onnx
 train:
-	$(PYTHON) model/train_mock_model.py
+	$(PYTHON) model/train_lstm.py
 
 # 3. TEST AUTOMATIZZATI: Esegue pytest con flag -v (verbose: stampa il nome di ogni singolo test e l'esito)
 test:
@@ -92,26 +93,31 @@ scan:
 # Richiede Docker attivo e i comandi kind/kubectl disponibili nel PATH.
 cluster-up:
 	kind create cluster --name $(CLUSTER_NAME) --config k8s/kind-config.yaml
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml
 	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s
-	kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge -p '{"data":{"allow-snippet-annotations":"true"}}' 2>/dev/null || true
+	kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge -p '{"data":{"allow-snippet-annotations":"true","annotations-risk-level":"Critical"}}'
 
 # 7. DEPLOYMENT SUL CLUSTER:
 # Invoca direttamente lo script unificato scripts/deploy_k8s.sh (Single Source of Truth)
 deploy:
-	./scripts/deploy_k8s.sh
+	IMAGE_NAME=$(IMAGE_NAME) ./scripts/deploy_k8s.sh $(IMAGE_NAME)
 
 # 8. TEST MANUALE CON CURL:
-# Invia una chiamata GET a /health e una POST di esempio (dati sintetici) a /predict
+# Invia una chiamata GET a /health e una POST di esempio conforme allo schema clinico a /predict
+# verificando sia il canale HTTP in chiaro (porta 80) sia HTTPS crittografato (porta 443 con flag -k)
 test-endpoint:
-	@echo "[+] Test Health Probe (/health):"
+	@echo "[+] Test Health Probe (/health) via HTTP:"
 	curl -s -i http://localhost/health
-	@echo "\n\n[+] Test Readiness Probe (/ready):"
+	@echo "\n\n[+] Test Readiness Probe (/ready) via HTTP:"
 	curl -s -i http://localhost/ready
-	@echo "\n\n[+] Test Predict (/predict):"
+	@echo "\n\n[+] Test Predict (/predict) via HTTP:"
 	curl -s -i -X POST http://localhost/predict \
 		-H 'Content-Type: application/json' \
-		-d '{"patient_id": "PATIENT_DEMO", "features": [[110,0,0],[112,0,0],[115,0,0],[120,0,0],[130,50,0],[150,0,0],[170,0,0],[165,0,0],[155,0,0],[145,0,0],[135,0,0],[130,0,0]]}'
+		-d '{"patient_id": "PATIENT_DEMO", "glucose_history": [4.2,4.0,3.8,3.6,3.5,3.7,3.9,4.3,5.0,5.5,6.1,6.7,7.3], "exogenous_inputs": [3.6,0.0,3.8,0.0,3.9,0.0,4.1,0.0,4.2,0.0,4.3,0.0,4.5,0.0]}'
+	@echo "\n\n[+] Test Predict (/predict) via HTTPS (porta 443, certificato TLS autofirmato con flag -k):"
+	curl -s -i -k -X POST https://localhost/predict \
+		-H 'Content-Type: application/json' \
+		-d '{"patient_id": "PATIENT_DEMO", "glucose_history": [4.2,4.0,3.8,3.6,3.5,3.7,3.9,4.3,5.0,5.5,6.1,6.7,7.3], "exogenous_inputs": [3.6,0.0,3.8,0.0,3.9,0.0,4.1,0.0,4.2,0.0,4.3,0.0,4.5,0.0]}'
 	@echo "\n"
 
 # 9. STRESS TEST CON WRK:
@@ -132,3 +138,9 @@ logs:
 # Elimina il cluster KinD e cancella tutti i container, nodi e volumi temporanei creati
 cluster-down:
 	kind delete cluster --name $(CLUSTER_NAME)
+
+# 12. PULIZIA ARTEFATTI TEMPORANEI:
+# Rimuove cache bytecode Python, directory temporanee pytest e file effimeri di test
+clean:
+	@echo "[+] Pulizia cache Python e file temporanei..."
+	rm -rf .pytest_cache __pycache__ app/__pycache__ tests/__pycache__ model/__pycache__

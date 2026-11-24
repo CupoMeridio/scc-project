@@ -4,13 +4,13 @@
 # ------------------------------------------------------------------------------
 # STADIO 1: BUILDER (Ambiente di compilazione e scaricamento dipendenze)
 # ------------------------------------------------------------------------------
-# FROM: Definisce l'immagine di partenza.
-# - python:3.11-slim: Versione ufficiale minimale basata su Debian slim.
+# FROM: Definisce l'immagine di partenza con versione di patch immutabile (pinning per riproducibilità).
+# - python:3.11.11-slim: Versione ufficiale minimale basata su Debian 12 (bookworm) slim.
 #   Rispetto all'immagine standard 'python:3.11' (che pesa ~1 GB), 'slim' pesa solo ~130 MB
 #   e non contiene compilatori C, documentazione o utility inutilizzate, abbattendo le CVE rilevate da Docker Scout.
 # - AS builder: Assegna un nome simbolico a questo stadio intermedio. I file generati qui
 #   potranno essere copiati nel secondo stadio; tutto il resto verrà automaticamente eliminato!
-FROM python:3.11-slim AS builder
+FROM python:3.11.11-slim AS builder
 
 # WORKDIR /build: Imposta la cartella di lavoro corrente all'interno del container.
 # Se la cartella /build non esiste, Docker la crea automaticamente.
@@ -32,8 +32,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # ------------------------------------------------------------------------------
 # STADIO 2: RUNNER (Ambiente di produzione finale: minimale, sicuro e non-root)
 # ------------------------------------------------------------------------------
-# Inizializzazione da un'immagine pulita: gli artefatti temporanei e i tool di compilazione dello stadio 'builder' vengono esclusi.
-FROM python:3.11-slim AS runner
+# Inizializzazione da un'immagine pulita con tag immutabile coincidente con lo stadio di build.
+FROM python:3.11.11-slim AS runner
 
 # ENV: Imposta variabili d'ambiente permanenti valide per tutti i processi del container.
 # - PYTHONDONTWRITEBYTECODE=1: Impedisce all'interprete Python di generare file compilati .pyc sul disco.
@@ -49,8 +49,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000 \
     HOST=0.0.0.0 \
     MODEL_PATH="model/model.onnx" \
-    METADATA_PATH="model/model_metadata.json" \
-    MODEL_MODE="real"
+    METADATA_PATH="model/model_metadata.json"
 
 # Imposta la cartella di lavoro principale dell'applicazione
 WORKDIR /app
@@ -69,9 +68,11 @@ RUN addgroup --system --gid 10001 appgroup && \
 # --chown=appuser:appgroup: Assegna immediatamente la proprietà dei file all'utente non-root.
 COPY --from=builder --chown=appuser:appgroup /root/.local /home/appuser/.local
 
-# Copia il codice sorgente dell'API e gli artefatti del modello (model.onnx e model_metadata.json)
+# Copia il codice sorgente dell'API e solo gli artefatti necessari per l'inferenza runtime
+# (vengono esclusi script di training e pesi grezzi PyTorch .pt, riducendo le dimensioni dell'immagine)
 COPY --chown=appuser:appgroup app/ /app/app/
-COPY --chown=appuser:appgroup model/ /app/model/
+COPY --chown=appuser:appgroup model/model.onnx* /app/model/
+COPY --chown=appuser:appgroup model/model_metadata.json /app/model/
 
 # chown -R: Assicura ricorsivamente che tutte le cartelle appartengano all'utente non privilegiato
 RUN chown -R appuser:appgroup /app /home/appuser
@@ -93,11 +94,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-# CMD: Comando predefinito eseguito quando il container viene avviato (Forma Exec: lista di stringhe JSON).
-# - uvicorn: Il server ASGI ad alte prestazioni.
-# - app.main:app: Indica di cercare la variabile 'app' (l'oggetto FastAPI) dentro il file app/main.py.
-# - --host 0.0.0.0: Accetta connessioni da qualsiasi interfaccia di rete (fondamentale per Docker).
-# - --port 8000: Porta TCP su cui ascoltare.
-# - --workers 1: Configurazione a processo singolo (la scalabilità orizzontale è demandata
-#   alle repliche dei pod in Kubernetes, evitando la moltiplicazione di worker interni al container).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# CMD: Comando predefinito eseguito quando il container viene avviato.
+# L'uso della forma 'exec' all'interno della shell assicura che uvicorn diventi il processo PID 1
+# e riceva direttamente i segnali del kernel OS (SIGTERM/SIGINT) per un graceful shutdown in Kubernetes,
+# supportando al contempo le variabili d'ambiente HOST e PORT.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-8000} --workers 1"]
