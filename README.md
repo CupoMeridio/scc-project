@@ -12,7 +12,7 @@
 
 ## 1. Project Overview & Clinical Context
 
-> **[Consult the official project assignment PDF](traccia.pdf)** for complete academic criteria and submission guidelines.
+> **[Consult the official project assignment PDF](docs/traccia.pdf)** for complete academic criteria and submission guidelines.
 
 ### The Three Official Assignment Options:
 1. **Option 1:** Predictive monitoring and early warning for Type 1 Diabetes patients (*Time Series Forecasting* & *Clinical Risk Classification*). *(SaMD note: as clarified by the instructor, pharmacological insulin dosing is strictly the physician's responsibility; the SaaS platform acts as an Early Warning System predicting 30-minute future glucose $G(t+6)$ and classifying risk into 7 clinical bands using the real OhioT1DM dataset).*
@@ -140,6 +140,16 @@ Alternatively, graphical interfaces and health probes are accessible via web bro
 * **OpenAPI Redoc Specifications:** [http://localhost/redoc](http://localhost/redoc)
 * **Liveness Probe:** [http://localhost/health](http://localhost/health)
 * **Readiness Gate Probe:** [http://localhost/ready](http://localhost/ready)
+
+#### Step 8b: CGM Sensor Stream Simulation (OhioT1DM Replay)
+To simulate the continuous wearable CGM sensor and meal log stream, replaying patient time series against the cloud inference engine:
+```bash
+make simulate-cgm
+# Or with custom options (e.g., patient 591, 20 steps, 0.3s delay):
+python scripts/simulate_cgm_patient.py --patient 591 --steps 20 --delay 0.3
+# In-memory local mode (runs without requiring an active cluster):
+python scripts/simulate_cgm_patient.py --local --steps 15
+```
 
 #### Step 9: Load Stress Testing & SLA Verification (Task G)
 Executes the automated `wrk` benchmark pipeline to validate all SLA criteria established by the project specification (Throughput $\ge 83.33\text{ RPS}$, Latency $p99 \le 1000\text{ ms}$, Error Rate $< 0.5\%$, corresponding to $99.5\%$ availability):
@@ -285,9 +295,11 @@ The official assignment specifies operational availability windows based on proj
 
 ```
 scc-project/
-├── traccia.pdf              # Official course assignment PDF
 ├── docs/
-│   └── feature_spec.md      # Formal data contract specifications for OhioT1DM
+│   ├── traccia.pdf                       # Official course assignment PDF
+│   ├── feature_spec.md                   # Formal data contract specifications for OhioT1DM
+│   ├── mappa_corrispondenza_architettura.md # Mapping between functional architecture and code
+│   └── Analisi architettura funzionale/  # SaaS functional requirements report and diagrams
 ├── .gitattributes           # Line ending normalization (LF for Linux, CRLF for PowerShell)
 ├── .gitignore               # Ignored caches, venvs, and build artifacts
 ├── Makefile                 # Unified command automation for Linux/macOS (Single Source of Truth)
@@ -314,6 +326,7 @@ scc-project/
 ├── tests/
 │   └── test_api.py          # Pytest automated test suite (health, ready, predict validation)
 └── scripts/
+    ├── simulate_cgm_patient.py # Continuous CGM sensor & meal log stream simulator from dataset
     ├── setup_host.sh / .ps1 # Host provisioning (Docker, wrk, KinD, kubectl)
     ├── setup_host_macos.sh  # macOS host provisioning via Homebrew
     ├── setup_env.sh / .ps1  # Python VENV manager: CPU, CUDA, and ROCm profiles by platform

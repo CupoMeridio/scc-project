@@ -3,7 +3,7 @@
 
 # .PHONY: Dichiara a Make che i nomi elencati NON sono file fisici su disco, ma "bersagli" (target) da eseguire sempre.
 # Senza .PHONY, la presenza di una directory omonima ai target ne impedirebbe la regolare esecuzione.
-.PHONY: help setup env env-cpu-minimal env-cpu-train env-cuda env-rocm env-auto train test build scan cluster-up deploy test-endpoint stress-test cluster-down logs clean
+.PHONY: help setup env env-cpu-minimal env-cpu-train env-cuda env-rocm env-auto train test build scan cluster-up deploy test-endpoint simulate-cgm stress-test cluster-down logs clean
 
 # VARIABILI:
 # ?= significa "assegna questo valore se la variabile non e gia stata definita esternamente".
@@ -33,6 +33,7 @@ help:
 	@echo "  make cluster-up       - Crea il cluster KinD (1 master + 2 workers) con Ingress (Passo F)"
 	@echo "  make deploy           - Esegue il deployment completo idempotente sul cluster K8s (Passo H)"
 	@echo "  make test-endpoint    - Invia richieste curl di prova (/health e /predict)"
+	@echo "  make simulate-cgm     - Simula lo streaming continuo del sensore CGM dal dataset"
 	@echo "  make stress-test      - Esegue lo stress test wrk con validazione SLA automatica (Passo G)"
 	@echo "  make logs             - Mostra i log aggregati dei pod applicativi"
 	@echo "  make clean            - Rimuove cache Python, file temporanei e log di test"
@@ -120,7 +121,13 @@ test-endpoint:
 		-d '{"patient_id": "PATIENT_DEMO", "glucose_history": [4.2,4.0,3.8,3.6,3.5,3.7,3.9,4.3,5.0,5.5,6.1,6.7,7.3], "exogenous_inputs": [3.6,0.0,3.8,0.0,3.9,0.0,4.1,0.0,4.2,0.0,4.3,0.0,4.5,0.0]}'
 	@echo "\n"
 
-# 9. STRESS TEST CON WRK:
+# 9. SIMULAZIONE SENSORE CGM (Continuous Glucose Monitor):
+# Esegue lo script di replay temporale dal dataset OhioT1DM simulando un flusso continuo di campioni
+# trasmettendo finestre temporali da 60 minuti verso il cluster o in-process con l'opzione --local
+simulate-cgm:
+	$(PYTHON) scripts/simulate_cgm_patient.py --patient 591 --steps 15 --delay 0.3
+
+# 10. STRESS TEST CON WRK:
 # Esegue lo script di validazione SLA simulando 100 connessioni simultanee su 4 thread per 30 secondi
 # Verificando automaticamente throughput (>=83.33 RPS), latenza p99 (<=1000ms) ed errori (<0.5%)
 stress-test:

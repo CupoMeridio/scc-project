@@ -115,7 +115,6 @@ _tmp*
 # 9. FILE DI SISTEMA OPERATIVO (Windows / macOS)
 # ------------------------------------------------------------------------------
 .DS_Store
-.DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
@@ -123,3 +122,15 @@ ehthumbs.db
 ehthumbs_vista.db
 Thumbs.db
 [Dd]esktop.ini
+
+# ------------------------------------------------------------------------------
+# 10. FILE AUSILIARI DI COMPILAZIONE LATEX
+# ------------------------------------------------------------------------------
+*.aux
+*.out
+*.toc
+*.synctex.gz
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk

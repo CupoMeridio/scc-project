@@ -12,7 +12,7 @@
 
 ## 1. Panoramica del Progetto & Contesto Clinico
 
-> **[Consulta la traccia ufficiale del progetto](traccia.pdf)** per i requisiti accademici e i vincoli di consegna completi.
+> **[Consulta la traccia ufficiale del progetto](docs/traccia.pdf)** per i requisiti accademici e i vincoli di consegna completi.
 
 ### Le Tre Opzioni della Traccia Ufficiale:
 1. **Opzione 1:** Monitoraggio predittivo e allerta precoce per pazienti con Diabete di Tipo 1 (*Time Series Forecasting* & *Clinical Risk Classification*). *(Nota SaMD: come chiarito dal docente, il dosaggio farmacologico di insulina è responsabilità esclusiva del medico; il sistema SaaS agisce da Early Warning System predicendo la glicemia a 30 minuti $G(t+6)$ e classificando il rischio su 7 fasce cliniche sul dataset reale OhioT1DM).*
@@ -140,6 +140,16 @@ In alternativa, accesso alle interfacce web interattive tramite browser:
 * **Specifiche OpenAPI Redoc:** [http://localhost/redoc](http://localhost/redoc)
 * **Probe di Liveness:** [http://localhost/health](http://localhost/health)
 * **Probe di Readiness:** [http://localhost/ready](http://localhost/ready)
+
+#### Passo 8b: Simulazione Stream Sensore CGM dal Dataset Reale (OhioT1DM)
+Per simulare il flusso continuo di campionamento del sensore CGM e del diario pasti, riproducendo i dati clinici dei pazienti dal dataset verso l'API:
+```bash
+make simulate-cgm
+# Oppure con parametri personalizzati (es. paziente 591, 20 campioni, delay 0.3s):
+python scripts/simulate_cgm_patient.py --patient 591 --steps 20 --delay 0.3
+# Modalità locale in-memory (senza cluster attivo):
+python scripts/simulate_cgm_patient.py --local --steps 15
+```
 
 #### Passo 9: Stress Test di Carico e Validazione SLA (Task G)
 Esecuzione del benchmark automatizzato con `wrk` per convalidare i requisiti stringenti di Service Level Agreement stabiliti dalla traccia (Throughput $\ge 83.33\text{ RPS}$, Latenza $p99 \le 1000\text{ ms}$, Tasso di Errore $< 0.5\%$, corrispondente a una disponibilità del $99.5\%$):
@@ -285,9 +295,11 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 
 ```
 scc-project/
-├── traccia.pdf              # Traccia ufficiale del progetto d'esame
 ├── docs/
-│   └── feature_spec.md      # Specifiche tecniche formali del contratto dati OhioT1DM
+│   ├── traccia.pdf                       # Traccia ufficiale del progetto d'esame
+│   ├── feature_spec.md                   # Specifiche tecniche formali del contratto dati OhioT1DM
+│   ├── mappa_corrispondenza_architettura.md # Raccordo tra architettura funzionale e codice
+│   └── Analisi architettura funzionale/  # Relazione e diagrammi requisiti funzionali SaaS
 ├── .gitattributes           # Normalizzazione terminatori di riga (LF per Linux, CRLF per PowerShell)
 ├── .gitignore               # Esclusione cache, venv e file temporanei
 ├── Makefile                 # Automazione per Linux/macOS (Single Source of Truth)
@@ -314,6 +326,7 @@ scc-project/
 ├── tests/
 │   └── test_api.py          # Test automatizzati con pytest su health, ready e predict
 └── scripts/
+    ├── simulate_cgm_patient.py # Simulatore continuo del sensore CGM e diario pasti da dataset
     ├── setup_host.sh / .ps1 # Setup strumenti di sistema (Docker, wrk, KinD, kubectl)
     ├── setup_host_macos.sh  # Setup macOS tramite Homebrew
     ├── setup_env.sh / .ps1  # Gestore VENV: profili CPU, CUDA e ROCm secondo piattaforma
