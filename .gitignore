@@ -134,3 +134,11 @@ Thumbs.db
 *.blg
 *.fls
 *.fdb_latexmk
+
+# ------------------------------------------------------------------------------
+# 11. NOTE DI SVILUPPO INTERNE (Non facenti parte dell'elaborato d'esame)
+# ------------------------------------------------------------------------------
+docs/mappa_corrispondenza_architettura.md
+docs/feature_spec.md
+docs/audit_reports/
+Diabetes/dataset_description.md

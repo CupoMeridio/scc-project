@@ -201,3 +201,30 @@ class HealthResponse(BaseModel):
     model_loaded: bool   # True se il runtime ONNX è correttamente inizializzato in RAM
     model_version: str  # Versione del modello caricata dai metadati
     app_version: str    # Versione dell'applicazione FastAPI
+
+
+class MetricsResponse(BaseModel):
+    """
+    Schema formale per la risposta di telemetria e Service Monitoring (GET /metrics).
+    Soddisfa i requisiti RF18, RNF01, RNF05, RNF06 per la dashboard del Center Manager.
+    Aggrega le statistiche senza esporre dati personali (conforme a RNF09).
+    In scenari multi-replica (es. 3 pod Kubernetes), restituisce la telemetria
+    pod-local dell'istanza specifica identificata da instance_id.
+    """
+    instance_id: str = Field(..., description="Identificativo del pod o host servente (es. hostname Kubernetes)")
+    uptime_seconds: float = Field(..., description="Secondi trascorsi dall'avvio del processo web")
+    service_status: str = Field(..., description="Stato complessivo del servizio ('healthy' o 'degraded')")
+    total_predictions: int = Field(..., description="Numero totale di predizioni elaborate da questa istanza")
+    successful_predictions: int = Field(..., description="Numero di predizioni completate con successo")
+    failed_predictions: int = Field(..., description="Numero di predizioni fallite per errori interni o dati corrotti (HTTP 500/503)")
+    error_rate: float = Field(default=0.0, description="Tasso percentuale di errore rispetto alle richieste totali (SLA contrattuale: <= 0.5%)")
+    avg_process_latency_ms: float = Field(..., description="Tempo medio di elaborazione HTTP della richiesta in millisecondi (inclusi Pydantic e ONNX)")
+    max_process_latency_ms: float = Field(..., description="Picco massimo di tempo di elaborazione HTTP in millisecondi")
+    sla_target_ms: float = Field(default=1000.0, description="Soglia contrattuale massima definita dallo SLA (1.0 s / 1000 ms)")
+    sla_compliance_rate: float = Field(..., description="Percentuale di predizioni con tempo di processo <= 1000 ms")
+    risk_class_distribution: Dict[int, int] = Field(
+        ...,
+        description="Distribuzione aggregata e anonimizzata delle predizioni per classe di rischio clinico (1..7)"
+    )
+    model_version: str = Field(..., description="Versione del modello ML attualmente in esecuzione")
+    app_version: str = Field(..., description="Versione del servizio FastAPI")

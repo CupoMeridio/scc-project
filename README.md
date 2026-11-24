@@ -4,7 +4,7 @@
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-KinD_v0.25-blue.svg)](https://kubernetes.io/)
 [![NGINX](https://img.shields.io/badge/Gateway-NGINX_Ingress-green.svg)](https://kubernetes.github.io/ingress-nginx/)
-[![Docker Scout](https://img.shields.io/badge/Security-Docker_Scout_Hardened-brightgreen.svg)](https://docs.docker.com/scout/)
+[![Container Hardening](https://img.shields.io/badge/Security-Non--Root_UID_10001-blue.svg)](docker/Dockerfile)
 [![FastAPI](https://img.shields.io/badge/Framework-FastAPI_%2B_ONNX-teal.svg)](https://fastapi.tiangolo.com/)
 [![Cross-Platform](https://img.shields.io/badge/Platform-Linux_%7C_macOS_%7C_Windows-orange.svg)](README.md)
 
@@ -140,6 +140,7 @@ Alternatively, graphical interfaces and health probes are accessible via web bro
 * **OpenAPI Redoc Specifications:** [http://localhost/redoc](http://localhost/redoc)
 * **Liveness Probe:** [http://localhost/health](http://localhost/health)
 * **Readiness Gate Probe:** [http://localhost/ready](http://localhost/ready)
+* **Service Telemetry & Monitoring:** [http://localhost/metrics](http://localhost/metrics)
 
 #### Step 8b: CGM Sensor Stream Simulation (OhioT1DM Replay)
 To simulate the continuous wearable CGM sensor and meal log stream, replaying patient time series against the cloud inference engine:
@@ -234,6 +235,7 @@ docker scout cves diabetes-api:latest
 ```powershell
 Invoke-RestMethod -Uri http://localhost/health
 Invoke-RestMethod -Uri http://localhost/ready
+Invoke-RestMethod -Uri http://localhost/metrics
 ```
 Access [http://localhost/docs](http://localhost/docs) in a browser for interactive API inference.
 
@@ -279,7 +281,7 @@ The official assignment specifies operational availability windows based on proj
 | **Connection Limiting** | Mitigates Slowloris attacks and socket table exhaustion on the ingress gateway. | `nginx.ingress.kubernetes.io/limit-connections: "150"`. |
 | **TLS / HTTPS Termination** | End-to-end encryption of in-transit biometric data (HIPAA & GDPR Art. 32). | Secret `diabetes-tls-cert` on port 443, certificate with SAN `DNS:localhost, IP:127.0.0.1`. |
 | **Maximum HTTP Body Size** | Prevents memory exhaustion (Memory Starvation) as valid time-series payloads weigh < 2 KB. | `nginx.ingress.kubernetes.io/proxy-body-size: "1m"`. |
-| **HTTP Verb Restriction** | Principle of Least Privilege: only `GET` (health/ready) and `POST` (predict) allowed. | NGINX snippet: `if ($request_method !~ ^(GET|POST|HEAD)$) { return 405; }`. |
+| **HTTP Verb Restriction** | Principle of Least Privilege: only `GET` (health/ready/metrics) and `POST` (predict) allowed. | NGINX snippet: `if ($request_method !~ ^(GET|POST|HEAD)$) { return 405; }`. |
 | **OWASP HTTP Security Headers** | Defense-in-Depth against MIME sniffing, clickjacking, and protocol downgrade. | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`. |
 | **K8s Resource Quotas** | Prevents noisy-neighbor starvation and internal CPU/RAM exhaustion across worker nodes. | Container limits: `cpu: 500m`, `memory: 256Mi`. |
 
@@ -297,8 +299,6 @@ The official assignment specifies operational availability windows based on proj
 scc-project/
 ├── docs/
 │   ├── traccia.pdf                       # Official course assignment PDF
-│   ├── feature_spec.md                   # Formal data contract specifications for OhioT1DM
-│   ├── mappa_corrispondenza_architettura.md # Mapping between functional architecture and code
 │   └── Analisi architettura funzionale/  # SaaS functional requirements report and diagrams
 ├── .gitattributes           # Line ending normalization (LF for Linux, CRLF for PowerShell)
 ├── .gitignore               # Ignored caches, venvs, and build artifacts
@@ -324,7 +324,7 @@ scc-project/
 │   ├── service.yaml         # Internal ClusterIP load balancer
 │   └── ingress.yaml         # NGINX Ingress with rate limiting (1000 rps), TLS & security headers
 ├── tests/
-│   └── test_api.py          # Pytest automated test suite (health, ready, predict validation)
+│   └── test_api.py          # Pytest automated test suite (health, ready, predict, metrics validation)
 └── scripts/
     ├── simulate_cgm_patient.py # Continuous CGM sensor & meal log stream simulator from dataset
     ├── setup_host.sh / .ps1 # Host provisioning (Docker, wrk, KinD, kubectl)

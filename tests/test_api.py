@@ -350,3 +350,79 @@ def test_discrete_risk_classes_boundaries():
     assert compute_discrete_risk_class(13.89) == 6
     assert compute_discrete_risk_class(13.9) == 7
     assert compute_discrete_risk_class(25.0) == 7
+
+
+def test_metrics_monitoring_endpoint(client: TestClient):
+    """
+    TEST 14: Verifica dell'endpoint di Service Monitoring (/metrics).
+    - Risponde con HTTP 200 e schema MetricsResponse completo con instance_id.
+    - Registra conformità allo SLA (1000 ms), latenza di processo e distribuzioni anonimizzate.
+    """
+    res_initial = client.get("/metrics")
+    assert res_initial.status_code == 200
+    metrics_init = res_initial.json()
+    assert "instance_id" in metrics_init
+    assert len(metrics_init["instance_id"]) > 0
+    assert "uptime_seconds" in metrics_init
+    assert metrics_init["uptime_seconds"] >= 0.0
+    assert metrics_init["service_status"] in ["healthy", "degraded"]
+    assert metrics_init["sla_target_ms"] == 1000.0
+    assert "risk_class_distribution" in metrics_init
+
+    # Esegue una predizione ipoglicemica reale (classe 1) e verifica l'aggiornamento dinamico
+    # dei contatori, accertando che non sia un valore di riserva hardcoded
+    valid_payload = {
+        "patient_id": "METRICS_TEST_PATIENT",
+        "glucose_history": [2.2] * 13,
+        "exogenous_inputs": [0.0] * 14
+    }
+    res_pred = client.post("/predict", json=valid_payload)
+    assert res_pred.status_code == 200
+    pred_risk = res_pred.json()["risk_class"]
+    assert pred_risk == 1
+
+    res_after = client.get("/metrics")
+    assert res_after.status_code == 200
+    metrics_after = res_after.json()
+    assert metrics_after["total_predictions"] >= 1
+    assert metrics_after["successful_predictions"] >= 1
+    assert "error_rate" in metrics_after
+    assert metrics_after["error_rate"] >= 0.0
+    assert metrics_after["avg_process_latency_ms"] > 0.0
+    assert metrics_after["max_process_latency_ms"] >= metrics_after["avg_process_latency_ms"]
+    assert metrics_after["sla_compliance_rate"] >= 0.0
+    # JSON deserializza le chiavi intere dei dizionari come stringhe ("1", "2", ...)
+    assert "1" in metrics_after["risk_class_distribution"]
+    assert metrics_after["risk_class_distribution"]["1"] >= 1
+
+
+def test_metrics_no_double_counting_on_error(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    """
+    TEST 15: Verifica anti-regressione sul bug del doppio conteggio degli errori.
+    - Simula un fallimento e verifica che failed_predictions e total_predictions
+      vengano incrementati esattamente di 1 (nessun doppio conteggio).
+    """
+    m_before = client.get("/metrics").json()
+    total_before = m_before["total_predictions"]
+    failed_before = m_before["failed_predictions"]
+
+    from app import main
+    # Simula un'anomalia matematica NaN nell'output di onnx_session.run
+    class FakeSession:
+        def run(self, output_names, input_feed):
+            import numpy as np
+            return [np.array([float("nan")])]
+
+    monkeypatch.setattr(main, "onnx_session", FakeSession())
+
+    payload = {
+        "patient_id": "NAN_TEST_PATIENT",
+        "glucose_history": [5.5] * 13,
+        "exogenous_inputs": [0.0] * 14
+    }
+    res = client.post("/predict", json=payload)
+    assert res.status_code == 500
+
+    m_after = client.get("/metrics").json()
+    assert m_after["total_predictions"] == total_before + 1
+    assert m_after["failed_predictions"] == failed_before + 1

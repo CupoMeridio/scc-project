@@ -4,7 +4,7 @@
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-KinD_v0.25-blue.svg)](https://kubernetes.io/)
 [![NGINX](https://img.shields.io/badge/Gateway-NGINX_Ingress-green.svg)](https://kubernetes.github.io/ingress-nginx/)
-[![Docker Scout](https://img.shields.io/badge/Security-Docker_Scout_Hardened-brightgreen.svg)](https://docs.docker.com/scout/)
+[![Container Hardening](https://img.shields.io/badge/Security-Non--Root_UID_10001-blue.svg)](docker/Dockerfile)
 [![FastAPI](https://img.shields.io/badge/Framework-FastAPI_%2B_ONNX-teal.svg)](https://fastapi.tiangolo.com/)
 [![Cross-Platform](https://img.shields.io/badge/Platform-Linux_%7C_macOS_%7C_Windows-orange.svg)](README.it.md)
 
@@ -140,6 +140,7 @@ In alternativa, accesso alle interfacce web interattive tramite browser:
 * **Specifiche OpenAPI Redoc:** [http://localhost/redoc](http://localhost/redoc)
 * **Probe di Liveness:** [http://localhost/health](http://localhost/health)
 * **Probe di Readiness:** [http://localhost/ready](http://localhost/ready)
+* **Telemetria di Servizio & Monitoring:** [http://localhost/metrics](http://localhost/metrics)
 
 #### Passo 8b: Simulazione Stream Sensore CGM dal Dataset Reale (OhioT1DM)
 Per simulare il flusso continuo di campionamento del sensore CGM e del diario pasti, riproducendo i dati clinici dei pazienti dal dataset verso l'API:
@@ -234,6 +235,7 @@ docker scout cves diabetes-api:latest
 ```powershell
 Invoke-RestMethod -Uri http://localhost/health
 Invoke-RestMethod -Uri http://localhost/ready
+Invoke-RestMethod -Uri http://localhost/metrics
 ```
 Accesso a [http://localhost/docs](http://localhost/docs) per l'interazione grafica con le API.
 
@@ -279,7 +281,7 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 | **Connection Limiting** | Mitiga attacchi Slowloris e l'esaurimento della tabella dei socket/connessioni sul gateway. | `nginx.ingress.kubernetes.io/limit-connections: "150"`. |
 | **Terminazione TLS / HTTPS** | Cifratura end-to-end dei dati biometrici in transito (HIPAA & GDPR Art. 32). | Secret `diabetes-tls-cert` su porta 443, certificato con SAN `DNS:localhost, IP:127.0.0.1`. |
 | **Dimensione Massima Body HTTP** | Previene attacchi di esaurimento memoria (Memory Starvation) dato che il payload clinico pesa < 2 KB. | `nginx.ingress.kubernetes.io/proxy-body-size: "1m"`. |
-| **Restrizione Metodi HTTP** | Principio del Minimo Privilegio: sono ammessi solo `GET` (health/ready) e `POST` (predict). | NGINX snippet: `if ($request_method !~ ^(GET|POST|HEAD)$) { return 405; }`. |
+| **Restrizione Metodi HTTP** | Principio del Minimo Privilegio: sono ammessi solo `GET` (health/ready/metrics) e `POST` (predict). | NGINX snippet: `if ($request_method !~ ^(GET|POST|HEAD)$) { return 405; }`. |
 | **Header HTTP OWASP** | Difesa in profondità (Defense-in-Depth) per imporre standard moderni di sicurezza HTTP. | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`. |
 | **Quote di Risorse K8s** | Previene attacchi DoS interni e monopolio delle risorse CPU/RAM sul nodo host (Noisy Neighbor). | Limiti container: `cpu: 500m`, `memory: 256Mi`. |
 
@@ -297,8 +299,6 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 scc-project/
 ├── docs/
 │   ├── traccia.pdf                       # Traccia ufficiale del progetto d'esame
-│   ├── feature_spec.md                   # Specifiche tecniche formali del contratto dati OhioT1DM
-│   ├── mappa_corrispondenza_architettura.md # Raccordo tra architettura funzionale e codice
 │   └── Analisi architettura funzionale/  # Relazione e diagrammi requisiti funzionali SaaS
 ├── .gitattributes           # Normalizzazione terminatori di riga (LF per Linux, CRLF per PowerShell)
 ├── .gitignore               # Esclusione cache, venv e file temporanei
@@ -324,7 +324,7 @@ scc-project/
 │   ├── service.yaml         # ClusterIP interno
 │   └── ingress.yaml         # Ingress NGINX con rate limiting (1000 rps), TLS e security headers
 ├── tests/
-│   └── test_api.py          # Test automatizzati con pytest su health, ready e predict
+│   └── test_api.py          # Test automatizzati con pytest su health, ready, predict e metrics
 └── scripts/
     ├── simulate_cgm_patient.py # Simulatore continuo del sensore CGM e diario pasti da dataset
     ├── setup_host.sh / .ps1 # Setup strumenti di sistema (Docker, wrk, KinD, kubectl)

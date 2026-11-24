@@ -41,8 +41,8 @@ def map_clinical_to_patient_outcome(
     Parametri:
     - risk_class: Classe di rischio stimata dalla rete (1..7)
     - forecasted_mmol: Glucosio predetto a +30 minuti (mmol/L)
-    - current_cho: Carboidrati dichiarati dal paziente per il pasto corrente (g)
-    - diet_limit: Soglia massima di carboidrati prescritta dal diabetologo (g)
+    - current_cho: Tasso di assorbimento intestinale carboidrati (modello Hovorka, unità arbitrarie OhioT1DM)
+    - diet_limit: Soglia limite prescritta dal diabetologo (in scala Hovorka o grammi normalizzati)
 
     Ritorna:
     - outcome_code: Codice identificativo dell'esito
@@ -52,13 +52,13 @@ def map_clinical_to_patient_outcome(
     if risk_class in (1, 2):
         return (
             "RISK_OF_HYPOGLYCEMIA",
-            "Rischio Ipoglicemia: glucosio previsto critico (< 3.9 mmol/L). Assumere zuccheri rapidi.",
+            "Avviso Clinico: Glucosio previsto basso (< 3.9 mmol/L). Verificare e seguire il piano concordato con il medico.",
             True
         )
     elif risk_class in (6, 7):
         return (
             "RISK_OF_HYPERGLYCEMIA",
-            "Rischio Iperglicemia: glucosio previsto elevato (>= 10.0 mmol/L). Dose pasto eccessiva.",
+            "Avviso Clinico: Glucosio previsto elevato (>= 10.0 mmol/L). Verificare e consultare il piano terapeutico.",
             True
         )
     elif risk_class in (3, 5):
@@ -198,15 +198,28 @@ def simulate_cgm_stream(
     delay: float,
     diet_limit: float,
     insecure: bool,
-    local: bool
+    local: bool,
+    csv_path: Optional[Path] = None
 ) -> None:
     """
     Esegue il loop di streaming temporale del sensore CGM.
     """
-    csv_file = data_dir / patient_id / f"{patient_id}-ws-{split}(t+30).csv"
-    if not csv_file.exists():
-        # Tentativo con percorso alternativo senza sottocartella
-        csv_file = data_dir / f"{patient_id}-ws-{split}(t+30).csv"
+    if csv_path is not None and csv_path.exists():
+        csv_file = csv_path
+    else:
+        # 1. Percorso standard con sottocartella ID paziente (es. Diabetes/GlucoseClassification/591/591-ws-testing(t+30).csv)
+        candidate1 = data_dir / patient_id / f"{patient_id}-ws-{split}(t+30).csv"
+        if candidate1.exists():
+            csv_file = candidate1
+        else:
+            # 2. Percorso alternativo senza sottocartella
+            candidate2 = data_dir / f"{patient_id}-ws-{split}(t+30).csv"
+            if candidate2.exists():
+                csv_file = candidate2
+            else:
+                print(f"[!] ERRORE: File CSV per il paziente {patient_id} non trovato: {candidate1}", file=sys.stderr)
+                print("    Verifica che il dataset sia presente o specifica un percorso con --csv.", file=sys.stderr)
+                sys.exit(1)
 
     mode_label = "In-Memory TestClient (Local ONNX)" if local else f"Remote HTTP ({endpoint})"
 
@@ -218,7 +231,7 @@ def simulate_cgm_stream(
     print(f"Modalità esecuzione:   {mode_label}")
     print(f"Passi da simulare:     {steps if steps > 0 else 'Tutti i campioni del file'}")
     print(f"Frequenza di replay:   1 step ogni {delay:.2f}s (rappresenta 5 min di campionamento reale)")
-    print(f"Limite dieta prescr.:  {diet_limit:.1f} g di carboidrati per pasto")
+    print(f"Limite pasti (dimostr):{diet_limit:.2f} u.a. (tasso assorbimento Hovorka)")
     print("=" * 80)
 
     records = load_patient_records(csv_file, max_steps=steps)
@@ -298,7 +311,7 @@ def simulate_cgm_stream(
 
                 print(f"--- [Step {step:03d} | +{sim_minutes:03d} min] "
                       f"Glucosio: {curr_g_mgdl:5.1f} mg/dL ({curr_g_mmol:4.2f} mmol/L) | "
-                      f"Pasto: {cho:4.1f}g CHO | Insulina: {ins:3.1f}U ---")
+                      f"Assorbimento CHO: {cho:4.2f} (u.a. Hovorka) | Insulina: {ins:3.1f}U ---")
                 print(f"  HTTP {status_code} in {latency:5.1f} ms | "
                       f"Previsione a +30m: {pred_mgdl:5.1f} mg/dL ({pred_mmol:4.2f} mmol/L) | "
                       f"Classe: {risk_cls} ({risk_lbl})")
@@ -320,8 +333,28 @@ def simulate_cgm_stream(
     except KeyboardInterrupt:
         print("\n[!] Simulazione interrotta dall'utente.")
     finally:
-        if local_ctx is not None:
-            local_ctx.__exit__(None, None, None)
+        # Recupero telemetria Service Monitoring (GET /metrics — RF18, RNF01, RNF05, RNF06)
+        # prima di rilasciare la sessione locale
+        metrics_data = None
+        if local and local_client:
+            try:
+                m_res = local_client.get("/metrics")
+                if m_res.status_code == 200:
+                    metrics_data = m_res.json()
+            except Exception:
+                pass
+            if local_ctx is not None:
+                local_ctx.__exit__(None, None, None)
+        elif not local:
+            metrics_url = endpoint.rsplit("/", 1)[0] + "/metrics"
+            try:
+                req = urllib.request.Request(metrics_url, headers={"User-Agent": "CGM-Simulator-Client/1.0"})
+                ctx = ssl._create_unverified_context() if insecure else ssl.create_default_context()
+                with urllib.request.urlopen(req, context=ctx, timeout=3.0) as resp:
+                    if resp.status == 200:
+                        metrics_data = json.loads(resp.read().decode("utf-8"))
+            except Exception:
+                pass
 
     # Stampa del report riassuntivo finale
     print("=" * 80)
@@ -342,6 +375,28 @@ def simulate_cgm_stream(
         print(f"  - {code:25s}: {count:3d} ({pct:5.1f}%)")
     print("=" * 80)
 
+    if metrics_data:
+        print("\n" + "-" * 80)
+        print("TELEMETRIA SERVICE MONITORING (GET /metrics — RF18 / RNF01):")
+        print(f"  * Istanza / Pod ID:           {metrics_data.get('instance_id', 'N/A')}")
+        if not local:
+            print("  [!] NOTA MULTI-POD (Kubernetes): GET /metrics interroga il singolo pod")
+            print("      selezionato dal Service/Ingress. Con 3 repliche, i contatori riflettono")
+            print("      la telemetria pod-local dell'istanza indicata (non aggregata cluster-wide).")
+            print("      I contatori si resettano inoltre in caso di restart del singolo pod.")
+        print(f"  * Uptime del processo web:    {metrics_data.get('uptime_seconds', 0):.1f} s")
+        print(f"  * Stato salute servizio:      {metrics_data.get('service_status', 'N/A')}")
+        print(f"  * Predizioni totali servite:  {metrics_data.get('total_predictions', 0)}")
+        print(f"  * Predizioni fallite (errori):{metrics_data.get('failed_predictions', 0)}")
+        print(f"  * Tasso di errore:            {metrics_data.get('error_rate', 0.0):.2f}% (SLA: <= 0.5%)")
+        avg_lat = metrics_data.get('avg_process_latency_ms', 0)
+        max_lat = metrics_data.get('max_process_latency_ms', 0)
+        print(f"  * Latenza media processo:     {avg_lat:.2f} ms")
+        print(f"  * Picco massimo processo:     {max_lat:.2f} ms")
+        print(f"  * Conformità SLA (<= 1.0 s):  {metrics_data.get('sla_compliance_rate', 0):.1f}%")
+        print(f"  * Distribuzione 7 classi:     {metrics_data.get('risk_class_distribution')}")
+        print("-" * 80)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -352,6 +407,12 @@ def main() -> None:
         type=str,
         default="591",
         help="ID del paziente OhioT1DM (default: 591, es. 540, 544, 552...)"
+    )
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=None,
+        help="Percorso esplicito a un file CSV di test (default: cerca il dataset o il sample di fallback)"
     )
     parser.add_argument(
         "--data-dir",
@@ -388,7 +449,7 @@ def main() -> None:
         "--diet-limit",
         type=float,
         default=0.5,
-        help="Soglia limite di carboidrati prescritti per pasto (default: 0.5 su scala assorbimento OhioT1DM, oppure grammi per dati grezzi)"
+        help="Parametro dimostrativo per l'illustrazione della soglia pasti (default: 0.5 in unita di assorbimento Hovorka del dataset OhioT1DM)"
     )
     parser.add_argument(
         "--insecure",
@@ -403,10 +464,10 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Verifica preliminare esistenza cartella dati
-    if not args.data_dir.exists():
+    # Verifica preliminare esistenza cartella dati (solo se non è specificato un file --csv esplicito)
+    if args.csv is None and not args.data_dir.exists():
         print(f"[!] ERRORE: La cartella del dataset '{args.data_dir}' non esiste.", file=sys.stderr)
-        print("    Assicurati di trovarti nella radice del progetto o specifica --data-dir.", file=sys.stderr)
+        print("    Assicurati di trovarti nella radice del progetto o specifica --data-dir o --csv.", file=sys.stderr)
         sys.exit(1)
 
     simulate_cgm_stream(
@@ -418,7 +479,8 @@ def main() -> None:
         delay=args.delay,
         diet_limit=args.diet_limit,
         insecure=args.insecure,
-        local=args.local
+        local=args.local,
+        csv_path=args.csv
     )
 
 

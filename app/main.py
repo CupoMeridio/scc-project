@@ -25,8 +25,9 @@ import uuid   # Generazione di identificativi casuali univoci a 128 bit (UUID4) 
 import math   # Funzioni matematiche per verifica anti-NaN e anti-Inf
 import hashlib # Modulo crittografico per verifica dell'integrità SHA-256 degli artefatti
 import logging # Modulo standard per generare log strutturati con timestamp e severità
+import threading # Gestione concorrenza thread-safe per Service Monitoring e telemetria
 from contextlib import asynccontextmanager # Decoratore per definire il gestore asincrono del ciclo di vita (lifespan)
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 
 import numpy as np # Manipolazione efficiente dei tensori numerici
 from fastapi import FastAPI, HTTPException, Request, Response, status
@@ -38,6 +39,7 @@ from app.schemas import (
     PredictionRequest,
     PredictionResponse,
     HealthResponse,
+    MetricsResponse,
     RISK_METADATA,
     CLASS_BINS
 )
@@ -204,6 +206,69 @@ async def lifespan(app: FastAPI):
     logger.info("Chiusura del servizio completata: rilascio delle sessioni ONNX.")
 
 
+# -----------------------------------------------------------------------------
+# RACCOLTA TELEMETRIA E SERVICE MONITORING (RF18, RNF01, RNF05, RNF06)
+# -----------------------------------------------------------------------------
+class MetricsTracker:
+    """
+    Raccoglitore in-memory thread-safe delle metriche di servizio.
+    Registra i tempi di processo HTTP end-to-end, la conformità allo SLA (<= 1.0 s)
+    e la distribuzione aggregata dei profili di rischio clinico per il Center Manager.
+    """
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.start_time = time.time()
+        self.total_predictions = 0
+        self.successful_predictions = 0
+        self.failed_predictions = 0
+        self.total_latency_ms = 0.0
+        self.max_latency_ms = 0.0
+        self.sla_compliant_count = 0
+        self.risk_distribution = {i: 0 for i in range(1, 8)}
+
+    def record_prediction(self, latency_ms: float, risk_class: Optional[int] = None, success: bool = True):
+        with self._lock:
+            self.total_predictions += 1
+            if success:
+                self.successful_predictions += 1
+                self.total_latency_ms += latency_ms
+                if latency_ms > self.max_latency_ms:
+                    self.max_latency_ms = latency_ms
+                if latency_ms <= 1000.0:
+                    self.sla_compliant_count += 1
+                if risk_class is not None and 1 <= risk_class <= 7:
+                    self.risk_distribution[risk_class] += 1
+            else:
+                self.failed_predictions += 1
+
+    def get_metrics(self) -> Dict[str, Any]:
+        with self._lock:
+            uptime = time.time() - self.start_time
+            avg_lat = (self.total_latency_ms / self.successful_predictions) if self.successful_predictions > 0 else 0.0
+            sla_rate = (self.sla_compliant_count / self.successful_predictions * 100.0) if self.successful_predictions > 0 else 100.0
+            error_rate = (self.failed_predictions / self.total_predictions * 100.0) if self.total_predictions > 0 else 0.0
+            instance_id = os.environ.get("HOSTNAME", os.environ.get("COMPUTERNAME", "local-instance"))
+            return {
+                "instance_id": instance_id,
+                "uptime_seconds": round(uptime, 2),
+                "service_status": "healthy" if (onnx_session is not None and bool(scaler_params)) else "degraded",
+                "total_predictions": self.total_predictions,
+                "successful_predictions": self.successful_predictions,
+                "failed_predictions": self.failed_predictions,
+                "error_rate": round(error_rate, 2),
+                "avg_process_latency_ms": round(avg_lat, 2),
+                "max_process_latency_ms": round(self.max_latency_ms, 2),
+                "sla_target_ms": 1000.0,
+                "sla_compliance_rate": round(sla_rate, 2),
+                "risk_class_distribution": dict(self.risk_distribution),
+                "model_version": model_metadata.get("model_version", "unknown"),
+                "app_version": settings.VERSION
+            }
+
+
+metrics_tracker = MetricsTracker()
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
@@ -229,9 +294,9 @@ async def security_and_tracing_middleware(request: Request, call_next) -> Respon
         request_id = uuid.uuid4().hex[:12]
     request.state.request_id = request_id
 
-    start_time = time.time()
+    start_time = time.perf_counter()
     response: Response = await call_next(request)
-    process_time_ms = (time.time() - start_time) * 1000
+    process_time_ms = (time.perf_counter() - start_time) * 1000.0
 
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Frame-Options"] = "DENY"
@@ -239,6 +304,14 @@ async def security_and_tracing_middleware(request: Request, call_next) -> Respon
     response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none';"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-Process-Time-Ms"] = f"{process_time_ms:.2f}"
+
+    # Telemetria Service Monitoring (RF18 / RNF01): tracciamento automatico end-to-end
+    if request.url.path == "/predict" and request.method == "POST":
+        if response.status_code == 200:
+            risk_cls = getattr(request.state, "risk_class", None)
+            metrics_tracker.record_prediction(process_time_ms, risk_cls, success=True)
+        elif response.status_code in (500, 503):
+            metrics_tracker.record_prediction(process_time_ms, None, success=False)
 
     return response
 
@@ -279,6 +352,17 @@ def ready():
         model_version=model_metadata.get("model_version", "unknown"),
         app_version=settings.VERSION
     )
+
+
+@app.get("/metrics", response_model=MetricsResponse, tags=["Monitoring"])
+def get_service_metrics() -> MetricsResponse:
+    """
+    Endpoint per il Service Monitoring (RF18 / RNF01 / RNF05 / RNF06):
+    Restituisce telemetria aggregata su latenza media, picco massimo,
+    percentuale di rispetto SLA (<= 1.0 s) e distribuzione delle classi di rischio.
+    Non espone dati sensibili dei singoli pazienti (conforme a RNF09).
+    """
+    return MetricsResponse(**metrics_tracker.get_metrics())
 
 
 # -----------------------------------------------------------------------------
@@ -390,6 +474,7 @@ def predict(payload: PredictionRequest, request: Request) -> PredictionResponse:
 
         # 3. Classificazione del rischio clinico
         risk_class = compute_discrete_risk_class(clamped_forecast_mmol)
+        request.state.risk_class = risk_class
         class_info = RISK_METADATA.get(
             risk_class,
             {"label": "Fascia non determinata", "alert": "UNKNOWN"}
