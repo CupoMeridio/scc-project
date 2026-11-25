@@ -1,0 +1,69 @@
+% =====================================================================
+%  capitoli/01_introduzione.tex
+% =====================================================================
+\chapter{Introduction}
+\label{chap:introduzione}
+
+
+\section{Purpose and scope}
+This document defines \emph{what} the glucose monitoring system must do, not
+\emph{how} it will be built. It describes the functional architecture of the service
+chosen for Project~1 of the course: a machine learning model for time series
+forecasting, delivered as a web application (SaaS) on a secure cloud
+infrastructure. The document is written at a high level: it presents actors,
+requirements, use cases, functional components and system behavior, and it
+leaves out implementation details and technology stacks, which belong to later phases.
+
+The system is used by three kinds of users: the patients, the doctors
+(diabetologists) who follow them, and the manager of the center that runs the
+service. Requirements are prioritized using the MoSCoW scheme: \emph{Must}
+(M), \emph{Should} (S), \emph{Could} (C) and \emph{Won't} (W).
+
+\section{How the system works}
+At every meal the patient declares the amount of carbohydrates they intend to eat. A machine learning model, trained offline on historical patient cohorts, uses the patient's recent CGM measurements and the declared carbohydrates to estimate the glucose level thirty minutes later. 
+
+The patient immediately receives one of four possible outcomes. Two of them
+are risk outcomes, for which a flag is also recorded for the doctor. No instant
+notification is sent: the doctor sees the flag at the next periodic review.
+
+The doctor consults the history periodically, for example once a week, and
+identifies the trends of each patient. 
+
+
+The center manager observes the flow of
+requests and the performance of the cloud service.
+
+The application has two main purposes. For patients, it helps manage carbohydrate intake at each meal instead of relying on a fixed written diet. For doctors, it provides a way to monitor patients over time, compare predicted and measured glucose levels, and decide whether to contact the patient or adjust the diet.
+
+The system does not suggest insulin doses and does not make therapeutic
+decisions: the model only forecasts glucose at $+30$ minutes, and any decision
+remains with the doctor.
+\section{Actors}
+The system has three actors. Each of them accesses only the data and the
+functions related to their  role. 
+
+\begin{table}[H]
+\centering
+\caption{Actors of the system.}
+\label{tab:actors}
+\small
+\begin{tabular}{>{\bfseries\raggedright\arraybackslash}p{3.9cm}>{\raggedright\arraybackslash}p{6.8cm}>{\raggedright\arraybackslash}p{4.6cm}}
+\toprule
+\rowcolor{accent}\tablehead{Actor} & \tablehead{What the actor does} & \tablehead{What the actor sees}\\
+\midrule
+Patient & Enters the carbohydrates of every meal and receives the outcome of the prediction & Only his or her own data\\
+\rowcolor{softgrey}
+Doctor (diabetologist) & Registers new patients with their diet, monitors their glucose trend and records interventions & Only the patients in his or her care\\
+Center manager & Monitors the overall operation of the service & Aggregated data only\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Data acquisition}
+Four streams of data enter the system:
+\begin{itemize}
+  \item \textbf{Carbohydrates and meal announcements.} Entered manually by the patient at each meal, indicating the amount of carbohydrates (in grams) planned for the meal as well as any snacks scheduled across the 30-minute horizon.
+  \item \textbf{Continuous glucose monitoring (CGM).} Measured by a wearable sensor that records interstitial glucose every 5 minutes without manual intervention, providing an autoregressive sliding window of recent readings ($t-12 \dots t$). In this project, the physical sensor is simulated by replaying patient time series from the OhioT1DM dataset.
+  \item \textbf{Insulin records.} Basal rates and bolus doses logged by the patient's continuous subcutaneous insulin infusion (CSII) pump or smart pen device, capturing physiological insulin-on-board.
+  \item \textbf{Prescribed diet.} Established by the diabetologist for each patient, specifying target ranges and maximum carbohydrate thresholds for each meal.
+\end{itemize}

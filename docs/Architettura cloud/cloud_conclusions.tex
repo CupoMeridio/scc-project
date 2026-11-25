@@ -1,0 +1,15 @@
+% =====================================================================
+%  cloud_conclusions.tex
+% =====================================================================
+\chapter{Conclusions}
+\label{ch:conclusions}
+
+The architecture separates the system into zones protected by two firewalls,
+isolates the identities and the training data, keeps the services stateless so
+that they can be balanced and scaled, and treats the requests of the users and
+the samples of the sensors on two different paths. Redundancy and automatic
+recovery remove the single points of failure required by the SLA.
+
+The next phase will choose the concrete technologies for each mechanism, fix
+the scaling thresholds with a stress test, and scan the images for critical
+and high vulnerabilities.

@@ -1,0 +1,106 @@
+% =====================================================================
+%  cloud_sla_security.tex
+% =====================================================================
+\chapter{Service Level Agreement and security}
+\label{ch:sla}
+
+\section{Cloud architectures}
+
+The system combines different mechanisms to improve availability, scalability and fault tolerance:
+
+
+\begin{itemize}
+    \item \textbf{workload distribution} and \textbf{service load balancing}:
+      each service runs in multiple instances, with requests distributed
+      by a load balancer;
+    \item \textbf{dynamic scalability}: horizontal scaling is performed by the
+      automated scaling listener, and it is preferred to vertical scaling because it
+      does not require a restart and improves redundancy;
+    \item \textbf{redundant storage}: every storage device is paired with a secondary device that keeps a synchronized copy of the data;
+    \item \textbf{zero downtime} and \textbf{dynamic failure detection and
+      recovery}: when an instance fails, it is excluded from the service and automatically replaced by another one.
+\end{itemize}
+
+
+\section{How the architecture meets the SLA}
+
+The uptime window ranges between 6:00 and 22:00. With sixteen hours of uptime per day, an availability of 99.5\% means that downtime must not exceed 4.8 minutes per day. In addition, a single outage must not last longer than 30 minutes, and on average the duration should remain within 3 minutes.
+
+Because of these requirements, the time available to respond to failures is very limited and intervention should be managed automatically. \Cref{tab:sla-mapping} summarizes the
+solutions adopted to meet the SLA requirements.
+
+
+\begin{table}[H]
+\centering
+\small
+\rowcolors{2}{white}{softgrey}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{4cm} Y}
+\toprule
+\rowcolor{accent}
+\tablehead{SLA parameter} & \tablehead{Mechanisms and architectures} \\
+\midrule
+Availability $\geq$ 99.5\%   & active-active failover, redundant storage,
+                               at least two instances per service \\
+Outage max 30 min, avg 3 min & automatic failure detection and recovery,
+                               model updates one instance at a time  \\
+Reliability $\geq$ 99.5\%    & stateless services (a failed request can be
+                               repeated), queue that holds samples until stored \\
+Response time $\leq$ 1 s     & model in memory, short prediction path,
+                               dynamic horizontal scaling, SLA monitor \\
+50\,000 customers, 5\,000 requests/min & load balancer, automated scaling listener,
+                               ingestion separated from the requests \\
+\bottomrule
+\end{tabularx}
+\caption{How the architecture meets the Service Level Agreement.}
+\label{tab:sla-mapping}
+\end{table}
+
+The number of instances and the scaling thresholds will be fixed in the
+implementation phase through \textit{stress testing}.
+
+\section{Security}
+
+The system manages health data, so security must be a main focus. In this section we consider the possible threats and show which mechanisms counter them.
+
+\subsection{Threat agents}
+
+The system is exposed to different possible threat agents:
+\begin{itemize}
+    \item an \textbf{anonymous attacker} without credentials, who tries to reach the service from the Internet;
+    \item a \textbf{trusted attacker}, who is a legitimate user (such as a patient or a doctor) that tries to access unauthorized data;
+    \item a \textbf{malicious insider}, such as an administrator who tries to read the health data;
+    \item a \textbf{malicious service agent}, which is a program that intercepts or alters the traffic.
+\end{itemize}
+
+\subsection{Threats and countermeasures}
+
+\begin{table}[H]
+\centering
+\small
+\rowcolors{2}{white}{softgrey}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.8cm} Y}
+\toprule
+\rowcolor{accent}
+\tablehead{Threat} & \tablehead{Countermeasures} \\
+\midrule
+Traffic eavesdropping        & TLS on all the external and internal connections \\
+Malicious intermediary       & TLS with server certificate\\
+Denial of service            & external firewall, rate limiting, automated scaling,
+                               queue for the sample readings \\
+Insufficient authorization   & role-based routing on the load balancer, least privilege, check of the doctor-patient
+                               assignment, aggregated view without personal data, audit monitor \\
+Virtualization attack        & hardened images, one service per virtual server \\
+Overlapping trust boundaries & separate perimeters, two firewalls, isolated identity zone \\
+Malicious insider            & encryption at rest, pseudonymized training data, audit monitor, no direct access of administrators to the data \\
+\bottomrule
+\end{tabularx}
+\caption{Security threats and countermeasures.}
+\label{tab:threats}
+\end{table}
+
+The most relevant threats to this architecture are \textit{denial of service} and \textit{insufficient authorization}.
+
+The first would leave the patient without support before a meal, so
+the protection is provided at different levels through the firewall, load balancer and automatic scaling.
+
+The second could expose sensitive health data. For this reason, the user's role is checked at the entry point, the diabetologist service verifies the patient's assignment, and all accesses are logged.

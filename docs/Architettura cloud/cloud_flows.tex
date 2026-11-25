@@ -1,0 +1,53 @@
+% =====================================================================
+%  cloud_flows.tex
+% =====================================================================
+\chapter{Main flows}
+\label{ch:flows}
+
+\section{Prediction path}
+\label{sec:flow-prediction}
+
+The main steps of the prediction process are shown in
+\cref{fig:architecture}.
+
+\begin{enumerate}
+\item The patient enters the carbohydrate amount of the meal (supplemented by pump or announced insulin data).
+\item The load balancer contacts the IAM to verify the user's identity
+and role.
+\item Based on the result, the patient is forwarded to the patient service.
+\item The patient service retrieves the most recent glucose readings
+from the time series.
+\item It then sends the glucose window, together with the exogenous inputs
+(carbohydrate intake and insulin), to the prediction service.
+\item The prediction service returns the glucose forecast at thirty minutes.
+\item The meal, exogenous inputs and forecast are stored in the relational
+database. A flag is also added for the doctor if hyperglycemia or
+hypoglycemia is predicted.
+\item Finally, the outcome is sent back to the patient.
+\end{enumerate}
+
+To stay within one second, the model is loaded from the repository only when
+an instance starts or when a new version is published, never during a request. 
+
+
+\section{Ingestion of the glucose readings}
+\label{sec:flow-ingestion}
+
+In a real deployment, the sensors of about 50 000 patients generate around 10 000 samples per minute. The CGM ingestion component in the DMZ places each sample in a queue before storing it. The ingestion workers then take the samples from the queue and write them to the time series. If the storage slows down or a worker fails, the samples simply remain in the queue until they can be processed. This prevents data loss and keeps the ingestion process separate from the prediction path.
+
+\section{Doctor access}
+
+The doctor accesses the system through the diabetologist service and can only view the patients assigned to them. The service retrieves patient information, flags and forecasts from the relational database, as well as the measured glucose values from the time series. This gives the doctor the possibility to compare the forecasts with the actual readings. The doctor can also manage diets and interventions and register new patients. All accesses to health data are recorded by the audit monitor.
+
+\section{Manager access}
+
+The manager reaches only the manager service. It provides the aggregated view, which is periodically generated from operational data after removing personal identifiers. The manager can also view the metrics collected by the SLA monitor. This service has no access to personal data or to the operational databases.
+
+\section{Training and publication of a new model}
+
+The data zone periodically exports a pseudonymized copy of the data to the
+training zone. The training batch runs periodically on this copy to update
+the unified global model and publishes the new model version in the model
+repository (newly registered patients do not require per-patient retraining).
+The prediction instances load the new version one at a time, while the others
+keep serving, so the service remains available during the update.

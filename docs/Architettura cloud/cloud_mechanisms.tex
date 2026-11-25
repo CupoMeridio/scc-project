@@ -1,0 +1,143 @@
+% =====================================================================
+%  cloud_mechanisms.tex
+% =====================================================================
+\chapter{Cloud mechanisms}
+\label{ch:mechanisms}
+
+\section{Infrastructure mechanisms}
+
+\subsection{Logical network perimeter}
+
+The logical network perimeter works at two levels. The outer perimeter
+separates the system from the other consumers of the cloud, while the inner
+perimeters divide it into the zones described in \cref{sec:zones}.
+The data zone is protected by both firewalls and can only be reached from
+the application zone. The training zone only receives the pseudonymized export
+and publishes new models to the model repository.
+
+\subsection{Virtual server}
+
+Each service runs on its own virtual servers, created from hardened images.
+In this way every service is sized independently and a fault in one service
+does not affect the others.
+
+\subsection{Cloud storage device}
+
+The data are stored in different devices according to how they are used
+and the level of security they require:
+
+\begin{itemize}
+    \item \textbf{time series}: stores the measured glucose values, one sample every five minutes per patient, about 167 writes per second;
+    \item \textbf{relational database}: stores patient information, doctor assignments, diets,
+          meals, forecasts, flags and interventions;
+    \item \textbf{model repository}: stores the different model versions, so that every forecast
+          can be traced to a model and a previous version can be restored;
+    \item \textbf{aggregated view}: contains statistics without personal information and is the only storage reachable by the manager service;
+    \item \textbf{pseudonymized copy}: is stored in the training zone and contains the data needed for training without direct identifiers.
+\end{itemize}
+
+\subsection{Resource replication}
+
+Resource replication is used both for scaling and for recovery after a failure.
+It creates new instances of virtual servers when needed and keeps a synchronized
+copy of each storage device in the data zone.
+
+\section{Specialized mechanisms}
+
+\subsection{Load balancer}
+
+The load balancer is the main entry point for all users. It handles HTTPS/TLS
+connections, applies a rate limit to each client to help prevent denial-of-service
+attacks and distributes requests across the available instances.
+
+It also contacts the IAM to check the user's identity and role before forwarding
+a request. Based on this information, the request is sent only to the service
+assigned to that role (for example, a patient can never reach the diabetologist or the manager service).
+
+\subsection{Automated scaling listener}
+
+
+The scaling listener monitors the load of each service and adds or removes
+instances when predefined thresholds are reached. The workload changes
+throughout the day, with higher demand around breakfast, lunch and dinner.
+To avoid wasting resources during quieter periods or having too few instances
+during peak hours, the system can adjust the number of instances automatically.
+
+At least two instances of each online service are always kept
+available to support failover.
+
+\subsection{Failover system}
+
+
+The architecture uses an \textit{active-active} configuration, where all instances
+handle requests at the same time. If one of them fails, the others continue
+serving users while a replacement instance is started. 
+
+We chose this approach
+over active-passive because the instances are already needed to handle the
+workload. There is also no need to wait for a standby instance to take over,
+which helps keep outages short.
+
+Storage devices also have a synchronized
+replica ready to replace the primary one if it fails.
+
+\subsection{SLA monitor}
+
+The SLA monitor keeps track of the uptime and response time of each service.
+It also sends an alert when a measured value gets close to its allowed limit.
+The collected metrics are available to the manager service and displayed
+in the center manager's dashboard.
+
+\subsection{Audit monitor}
+
+The audit monitor collects logs of all accesses to health data (who accessed which data, and
+when) in a log that the services cannot modify, making it easier to identify
+any improper access.
+
+\section{Security mechanisms}
+\label{sec:mech-security}
+
+\subsection{Firewalls}
+
+
+The external firewall allows only HTTPS traffic to reach the load balancer,
+and sensor traffic to reach the CGM ingestion component. 
+
+The internal firewall, instead,
+controls the connections from the DMZ to the internal zones.
+
+This prevents the
+internal components from being directly exposed to the Internet.
+
+\subsection{Encryption}
+
+TLS protects the data in transit against eavesdropping and malicious
+intermediaries. Data stored in the devices of the
+data zone are also encrypted at rest. 
+
+\subsection{Identity and access management}
+
+
+The IAM stores user accounts, credentials and roles. It also handles the
+identity checks requested by the load balancer. Passwords are always stored only as hashes. 
+
+The load balancer checks the user's role,
+while the diabetologist service performs an additional check to make sure
+that the requested patient is actually assigned to that doctor.
+
+
+
+\subsection{Hardened virtual server images}
+
+
+Every virtual server starts from an image without unnecessary software,
+services and accounts, and with no known critical or high vulnerabilities
+(verified through automated vulnerability scanning). Instances created by
+scaling or failover have the same protection level.
+
+
+\subsection{Pseudonymization}
+
+The data exported to the training zone have no direct identifiers. Since the training process does not need to know who the patients
+are, this reduces the risk of exposing their identities if the training zone
+is compromised.

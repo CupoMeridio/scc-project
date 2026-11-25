@@ -1,0 +1,162 @@
+% =====================================================================
+%  main.tex — Relazione progetto Secure Cloud Computing (UNISA)
+% =====================================================================
+\documentclass[12pt,a4paper,oneside]{report}
+
+% ---------------------------------------------------------------------
+%  Lingua, codifica, font
+% ---------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------------------------------------------------------------------
+%  Layout pagina e interlinea
+% ---------------------------------------------------------------------
+\usepackage[a4paper,top=2.2cm,bottom=2.2cm,left=2.2cm,right=2.2cm]{geometry}
+
+\usepackage{setspace}
+\setstretch{1.2}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.4em}
+
+% ---------------------------------------------------------------------
+%  Colori
+% ---------------------------------------------------------------------
+\usepackage[table]{xcolor}
+
+% Blu ardesia, desaturato
+\definecolor{accent}{HTML}{3D5A80}
+% Grigio-azzurro appena percettibile per le righe alternate
+\definecolor{softgrey}{HTML}{F3F5F8}
+
+% ---------------------------------------------------------------------
+%  Titoli e sezioni
+% ---------------------------------------------------------------------
+\usepackage{titlesec}
+
+\titleformat{\chapter}[hang]
+    {\normalfont\LARGE\bfseries\color{black}}
+    {\thechapter}{15pt}{}
+
+\titlespacing*{\chapter}{0pt}{-15pt}{25pt}
+
+\titleformat{\section}
+    {\normalfont\Large\bfseries\color{black}}
+    {\thesection}{0.8em}{}
+
+\titlespacing*{\section}{0pt}{2em}{0.8em}
+
+\titleformat{\subsection}
+    {\normalfont\large\bfseries}
+    {\thesubsection}{0.8em}{}
+
+\titlespacing*{\subsection}{0pt}{1.5em}{0.6em}
+
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+
+% ---------------------------------------------------------------------
+%  Intestazioni e piè di pagina
+% ---------------------------------------------------------------------
+\usepackage{fancyhdr}
+
+\pagestyle{fancy}
+\fancyhf{}
+
+\fancyhead[L]{\small Secure Cloud Computing}
+\fancyhead[R]{\small Functional Architecture Document}
+
+\fancyfoot[C]{\small\thepage}
+
+\setlength{\headheight}{14pt}
+\renewcommand{\headrulewidth}{0.3pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\fancypagestyle{plain}{
+    \fancyhf{}
+    \fancyfoot[C]{\small\thepage}
+    \renewcommand{\headrulewidth}{0pt}
+}
+
+% ---------------------------------------------------------------------
+%  Tabelle
+% ---------------------------------------------------------------------
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+
+\renewcommand{\arraystretch}{1.35}
+\setlength{\tabcolsep}{6pt}
+
+% Elimina le strisce bianche tra le regole booktabs e le righe colorate
+\setlength{\aboverulesep}{0pt}
+\setlength{\belowrulesep}{0pt}
+
+% Linee booktabs dello stesso colore dell'intestazione:
+%  - \toprule si fonde con l'intestazione colorata
+%  - \midrule invisibile (l'intestazione separa già)
+%  - \bottomrule chiude la tabella con una linea sottile
+\setlength{\heavyrulewidth}{0.8pt}
+\setlength{\lightrulewidth}{0pt}
+\setlength{\cmidrulewidth}{0.4pt}
+\arrayrulecolor{accent}
+
+% Intestazione delle tabelle
+\newcommand{\tablehead}[1]{%
+    \textcolor{white}{\bfseries #1}%
+}
+
+% Riga dei requisiti
+\newcommand{\reqrow}[3]{#1 & #2 & #3 \\}
+
+% Titolo gruppo di requisiti
+\newcommand{\reqgroup}[1]{%
+    \par\vspace{0.8em}\noindent{\normalsize\bfseries #1}\par\nopagebreak\vspace{0.2em}%
+}
+
+% ---------------------------------------------------------------------
+%  Figure e didascalie
+% ---------------------------------------------------------------------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+
+\captionsetup{
+    font=small,
+    labelfont=bf
+}
+
+% ---------------------------------------------------------------------
+%  Liste
+% ---------------------------------------------------------------------
+\usepackage{enumitem}
+\setlist{itemsep=2pt}
+
+% ---------------------------------------------------------------------
+%  Utility
+% ---------------------------------------------------------------------
+\usepackage[hidelinks]{hyperref}
+% =====================================================================
+\begin{document}
+
+% --- Parte iniziale (numerazione romana) ---
+\pagenumbering{roman}
+
+\hypersetup{pageanchor=false}
+\include{frontespizio}
+\hypersetup{pageanchor=true}
+\include{abstract}
+
+% --- Corpo (numerazione araba) ---
+\cleardoublepage
+\pagenumbering{arabic}
+
+\include{part1}
+\include{part2}
+\include{part3}
+
+\end{document}

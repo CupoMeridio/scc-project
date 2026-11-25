@@ -1,0 +1,32 @@
+% =====================================================================
+%  abstract.tex
+% =====================================================================
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\thispagestyle{plain}
+
+% Colonna di testo più stretta e centrata (rientro di 1.8 cm per lato)
+\begin{list}{}{%
+    \setlength{\leftmargin}{1.5cm}%
+    \setlength{\rightmargin}{1.5cm}%
+    \setlength{\itemsep}{0pt}%
+    \setlength{\parsep}{0.8em}%
+    \setlength{\topsep}{0pt}}
+\item[]
+{\color{accent}\rule{\linewidth}{0.8pt}}
+
+\vspace{0.6em}
+
+This document describes the cloud architecture of the software-as-a-service application for glucose forecasting in Type 1 diabetes, whose functional architecture was presented in the previous phase of the project. The functional components are mapped onto actual cloud computing mechanisms and architectures.
+
+The system is divided into network zones, protected by two firewalls and separate logical network perimeters. A load balancer, together with an isolated identity zone, directs each user to the services assigned to their role. These services are stateless and can scale automatically. Data are stored in encrypted and replicated cloud storage devices, while model training takes place offline using a pseudonymized copy of the data.
+
+The document also explains how the different mechanisms work together, describes the main system flows and discusses how the architecture meets the Service Level Agreement while protecting sensitive health data. The choice of specific technologies is left to the implementation phase.
+
+\vspace{0.4em}
+{\color{accent}\rule{\linewidth}{0.8pt}}
+
+\vspace{0.2em}
+
+
+\end{list}

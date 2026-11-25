@@ -1,0 +1,46 @@
+% =====================================================================
+%  abstract.tex
+% =====================================================================
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\thispagestyle{plain}
+
+% Colonna di testo più stretta e centrata (rientro di 1.8 cm per lato)
+\begin{list}{}{%
+    \setlength{\leftmargin}{1.5cm}%
+    \setlength{\rightmargin}{1.5cm}%
+    \setlength{\itemsep}{0pt}%
+    \setlength{\parsep}{0.8em}%
+    \setlength{\topsep}{0pt}}
+\item[]
+{\color{accent}\rule{\linewidth}{0.8pt}}
+
+\vspace{0.6em}
+This document describes the functional architecture of a
+\emph{software-as-a-service} application that forecasts the glucose level of
+patients with Type~1 diabetes thirty minutes after a meal.
+
+Before eating, the patient declares the carbohydrates of the meal. A machine
+learning model, fed with the patient's continuous glucose measurements,
+predicts the glucose level, and the patient immediately receives one of four
+outcomes: \emph{proceed}, \emph{proceed with a warning}, \emph{risk of
+hyperglycemia} or \emph{risk of hypoglycemia}. Risky predictions are recorded
+for the doctor, who reviews them periodically together with the trend of each
+patient, while the center manager follows aggregated statistics on the use and
+the performance of the service.
+
+The document identifies the three actors and the data to acquire, and lists the
+functional and non-functional requirements derived from the Service Level
+Agreement: service from 6:00 to 22:00, availability and reliability of at least
+99.5\%, response time within one second, 50\,000 customers and 5\,000 requests
+per minute. It then describes eight use cases and illustrates the behavior of
+the system through sequence diagrams. Implementation choices are deliberately
+left to the following design phases.
+
+\vspace{0.4em}
+{\color{accent}\rule{\linewidth}{0.8pt}}
+
+\vspace{0.2em}
+
+
+\end{list}
