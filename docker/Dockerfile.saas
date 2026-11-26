@@ -1,0 +1,46 @@
+# FILE: docker/Dockerfile.saas
+# RUOLO: Immagine unica del piano dati SaaS. Serve la SaaS API, l'Ingestion Worker
+#        e il Job di migrazione/seed: gli ultimi due differiscono solo per il comando
+#        di avvio, sovrascritto con `command` nei rispettivi manifest Kubernetes (P7).
+#        Zero dataset clinici nell'immagine runtime (Decisione D1).
+
+# Base image fissata per digest (riproducibilità): l'output di
+#   docker buildx imagetools inspect python:3.11.11-slim
+# è archiviato in docs/audit_reports/base_images_digests.txt.
+FROM python:3.11.11-slim@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS builder
+WORKDIR /build
+COPY requirements-saas.lock .
+# --require-hashes: pip installa un pacchetto solo se il suo sha256 coincide con quello
+# fissato nel lock, a difesa dal supply-chain tampering. Nessun `pip install --upgrade pip`:
+# la versione di pip è quella dell'immagine base, già deterministica.
+RUN pip install --no-cache-dir --require-hashes --user -r requirements-saas.lock
+
+FROM python:3.11.11-slim@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS runner
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/home/appuser/.local/bin:$PATH" \
+    PORT=8001 \
+    HOST=0.0.0.0
+
+WORKDIR /app
+
+RUN addgroup --system --gid 10001 appgroup && \
+    adduser --system --uid 10001 --ingroup appgroup --home /home/appuser appuser
+
+COPY --from=builder --chown=appuser:appgroup /root/.local /home/appuser/.local
+# alembic.ini + saas_app (con migrations/) servono al Job di migrazione/seed.
+COPY --chown=appuser:appgroup alembic.ini /app/alembic.ini
+COPY --chown=appuser:appgroup common/ /app/common/
+COPY --chown=appuser:appgroup saas_app/ /app/saas_app/
+
+RUN chown -R appuser:appgroup /app
+
+USER 10001:10001
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/health')" || exit 1
+
+# Comando di default: SaaS API. Worker (`python3 -m saas_app.worker`) e Job di seed
+# (`python3 -m saas_app.seed_cli`) sovrascrivono `command` nei manifest.
+CMD ["sh", "-c", "exec uvicorn saas_app.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-8001} --workers 1"]

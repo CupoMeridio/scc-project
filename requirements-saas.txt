@@ -1,0 +1,15 @@
+# Runtime dependencies for the SaaS Application Backend & Ingestion Worker
+# Questo file è la SORGENTE (vincoli >=) usata per generare il lock con hash
+# requirements-saas.lock. Il Dockerfile installa il lock con --require-hashes.
+# Rigenerazione (eseguire dentro un container Python 3.11 per coerenza con l'immagine):
+#   pip-compile --generate-hashes --strip-extras --output-file=requirements-saas.lock requirements-saas.txt
+fastapi>=0.115.8
+uvicorn[standard]>=0.34.0
+pydantic>=2.10.6
+sqlalchemy>=2.0.30
+psycopg[binary]>=3.2.0
+alembic>=1.14.0
+redis>=5.2.0
+pyjwt>=2.9.0
+bcrypt>=4.2.0
+httpx>=0.27.0

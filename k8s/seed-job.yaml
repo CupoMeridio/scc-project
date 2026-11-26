@@ -1,0 +1,65 @@
+# FILE: k8s/seed-job.yaml
+# RUOLO: Job Kubernetes dedicato alle sole migrazioni Alembic.
+# I dati demo (con credenziali generate) si caricano solo con make seed-demo.
+# NON monta il dataset OhioT1DM: RUN_DEMO_SEED=false, nessuna serie viene letta
+# (il volume dati è nel solo k8s/seed-demo-job.yaml, Decisione D1).
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: diabetes-saas-seed
+  namespace: default
+  labels:
+    app: diabetes-saas-seed
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: diabetes-saas-seed
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          # Stessa immagine unica del piano dati (Dockerfile.saas): il Job cambia
+          # solo il comando di avvio (P7).
+          image: diabetes-saas-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-m", "saas_app.seed_cli"]
+          env:
+            - name: SAAS_ENV
+              value: "production"
+            - name: RUN_DEMO_SEED
+              value: "false"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: saas-secrets
+                  key: MIGRATOR_DATABASE_URL
+            - name: SAAS_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: saas-secrets
+                  key: SAAS_APP_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "384Mi"

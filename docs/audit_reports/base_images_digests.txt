@@ -1,0 +1,599 @@
+# Evidenza pinning immagini base per digest (P7/P12)
+# Generato: 2026-11-26T11:35:57Z
+# Comando: docker buildx imagetools inspect <immagine>
+
+$ docker buildx imagetools inspect python:3.11.11-slim
+Name:      docker.io/library/python:3.11.11-slim
+MediaType: application/vnd.oci.image.index.v1+json
+Digest:    sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5
+           
+Manifests: 
+  Name:        docker.io/library/python:3.11.11-slim@sha256:a8e0a3090316aed0b11037aac613aef32fb1747dcc1dcb5c0f6c727a0113a07f
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/amd64
+  Annotations: 
+    org.opencontainers.image.created:         2025-04-08T01:31:23Z
+    org.opencontainers.image.revision:        ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e
+    org.opencontainers.image.source:          https://github.com/docker-library/python.git#ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e:3.11/slim-bookworm
+    org.opencontainers.image.url:             https://hub.docker.com/_/python
+    org.opencontainers.image.version:         3.11.11-slim-bookworm
+    com.docker.official-images.bashbrew.arch: amd64
+    org.opencontainers.image.base.digest:     sha256:4b44499bc2a6c78d726f3b281e6798009c0ae1f034b0bfaf6a227147dcff928b
+    org.opencontainers.image.base.name:       debian:bookworm-slim
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:fc48be6a8ce64079f3614c66468a532bbd16377fd55932cd24c5b092cced34c7
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: amd64
+    vnd.docker.reference.digest:              sha256:a8e0a3090316aed0b11037aac613aef32fb1747dcc1dcb5c0f6c727a0113a07f
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:4cfa0d42be44a42dadae768a3562ecc676d7f5f8f5fffcc69c5ec4f97bb085df
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v5
+  Annotations: 
+    org.opencontainers.image.created:         2025-04-08T07:16:27Z
+    org.opencontainers.image.revision:        ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e
+    org.opencontainers.image.source:          https://github.com/docker-library/python.git#ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e:3.11/slim-bookworm
+    org.opencontainers.image.url:             https://hub.docker.com/_/python
+    org.opencontainers.image.version:         3.11.11-slim-bookworm
+    com.docker.official-images.bashbrew.arch: arm32v5
+    org.opencontainers.image.base.digest:     sha256:bf7ee0e80bc3f33bb693584818c1125cc4e6f1a2e12abfac2dd5fe3a0e0b9e73
+    org.opencontainers.image.base.name:       debian:bookworm-slim
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:9e8818b701fe05cd4390b0194cd2c2a669f1316a39d9e8059ab88926b5dd4eee
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm32v5
+    vnd.docker.reference.digest:              sha256:4cfa0d42be44a42dadae768a3562ecc676d7f5f8f5fffcc69c5ec4f97bb085df
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:255bf8bf6db7d965b63556e52c9ce0fb3109d2d2fdc3b3775bcc58d6615a01b7
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v7
+  Annotations: 
+    org.opencontainers.image.url:             https://hub.docker.com/_/python
+    org.opencontainers.image.version:         3.11.11-slim-bookworm
+    com.docker.official-images.bashbrew.arch: arm32v7
+    org.opencontainers.image.base.digest:     sha256:8ba74c566fcc810a50be428d44244c386d27cb93c055480fca8c3f9acf002d08
+    org.opencontainers.image.base.name:       debian:bookworm-slim
+    org.opencontainers.image.created:         2025-04-08T12:11:39Z
+    org.opencontainers.image.revision:        ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e
+    org.opencontainers.image.source:          https://github.com/docker-library/python.git#ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e:3.11/slim-bookworm
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:61f1bef52536df8bb66eb7ce20b4d20d84dd95f161ed4180aac65afa85190191
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm32v7
+    vnd.docker.reference.digest:              sha256:255bf8bf6db7d965b63556e52c9ce0fb3109d2d2fdc3b3775bcc58d6615a01b7
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:8c42bdc2ab275c599320d8b4c7e150339d2cb373762d1cbc04257fee2ba66e4a
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm64/v8
+  Annotations: 
+    org.opencontainers.image.revision:        ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e
+    org.opencontainers.image.source:          https://github.com/docker-library/python.git#ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e:3.11/slim-bookworm
+    org.opencontainers.image.url:             https://hub.docker.com/_/python
+    org.opencontainers.image.version:         3.11.11-slim-bookworm
+    com.docker.official-images.bashbrew.arch: arm64v8
+    org.opencontainers.image.base.digest:     sha256:912d8a461ca5f85380a40de97d7b38dfcc39972de210518de07136126dd0bfa9
+    org.opencontainers.image.base.name:       debian:bookworm-slim
+    org.opencontainers.image.created:         2025-04-08T09:39:47Z
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:a2ff0e92d9959f8fddf0258ffc56e1f5c0380f5ec521e1cd92e91d19669b202e
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm64v8
+    vnd.docker.reference.digest:              sha256:8c42bdc2ab275c599320d8b4c7e150339d2cb373762d1cbc04257fee2ba66e4a
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:f51b77754c50465d0974ec4a282c29e38797e6a860decc7540d57bfc47b4c36d
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/386
+  Annotations: 
+    org.opencontainers.image.source:          https://github.com/docker-library/python.git#ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e:3.11/slim-bookworm
+    org.opencontainers.image.url:             https://hub.docker.com/_/python
+    org.opencontainers.image.version:         3.11.11-slim-bookworm
+    com.docker.official-images.bashbrew.arch: i386
+    org.opencontainers.image.base.digest:     sha256:546fc136c89a1b0554689e33bfe000687048faddee5157844b374acc03d773fd
+    org.opencontainers.image.base.name:       debian:bookworm-slim
+    org.opencontainers.image.created:         2025-04-08T01:36:52Z
+    org.opencontainers.image.revision:        ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:1635f79b624a51594770bc530188506ca2b252782d0be05d86c61d3f5604a9fe
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: i386
+    vnd.docker.reference.digest:              sha256:f51b77754c50465d0974ec4a282c29e38797e6a860decc7540d57bfc47b4c36d
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:52639f3127a5b40e8e42b759d61ba91ee22464721bd5dab5567b53a46ad6f32e
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/ppc64le
+  Annotations: 
+    org.opencontainers.image.revision:        ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e
+    org.opencontainers.image.source:          https://github.com/docker-library/python.git#ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e:3.11/slim-bookworm
+    org.opencontainers.image.url:             https://hub.docker.com/_/python
+    org.opencontainers.image.version:         3.11.11-slim-bookworm
+    com.docker.official-images.bashbrew.arch: ppc64le
+    org.opencontainers.image.base.digest:     sha256:6d08d69167c094bb6f76c99167391ff6c35ee237eb48f2e3ea7fdb65608ce4d2
+    org.opencontainers.image.base.name:       debian:bookworm-slim
+    org.opencontainers.image.created:         2025-04-08T06:40:34Z
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:9fab71c31754bf036ae3d866ad4852150b7767e31d7e313f1da8d488a8f17719
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: ppc64le
+    vnd.docker.reference.digest:              sha256:52639f3127a5b40e8e42b759d61ba91ee22464721bd5dab5567b53a46ad6f32e
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:06d2d4b933d405993dcd4b4d16afd5c7c26dfe1371e726f12c096617cbf0c193
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/s390x
+  Annotations: 
+    org.opencontainers.image.created:         2025-04-08T05:44:34Z
+    org.opencontainers.image.revision:        ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e
+    org.opencontainers.image.source:          https://github.com/docker-library/python.git#ded42cf92d68bb878c8a1a9a4f3c86bad6023f4e:3.11/slim-bookworm
+    org.opencontainers.image.url:             https://hub.docker.com/_/python
+    org.opencontainers.image.version:         3.11.11-slim-bookworm
+    com.docker.official-images.bashbrew.arch: s390x
+    org.opencontainers.image.base.digest:     sha256:604d86fd7ef6bb1e6dc5709e4149cb81953d5f006aa41f376aef84c7f152f332
+    org.opencontainers.image.base.name:       debian:bookworm-slim
+               
+  Name:        docker.io/library/python:3.11.11-slim@sha256:dba5f351ccec118a5a7b39c722ec9bc2896c381463096c9d0725607ff443ef22
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: s390x
+    vnd.docker.reference.digest:              sha256:06d2d4b933d405993dcd4b4d16afd5c7c26dfe1371e726f12c096617cbf0c193
+    vnd.docker.reference.type:                attestation-manifest
+
+$ docker buildx imagetools inspect nginxinc/nginx-unprivileged:1.27-alpine
+Name:      docker.io/nginxinc/nginx-unprivileged:1.27-alpine
+MediaType: application/vnd.oci.image.index.v1+json
+Digest:    sha256:65e3e85dbaed8ba248841d9d58a899b6197106c23cb0ff1a132b7bfe0547e4c0
+           
+Manifests: 
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:28d91bdce70ad09025ea901458fdd149259d8e05982ade79d4ef2c0d9470eb48
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/amd64
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:c845dbb6cc5389ab1bc5aa9af14edb460108dcf72090e3ee14c120c983b98625
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v6
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:aa6b84a1f676a8922a9ba433134dd10dc232f4dd73fdf3c414829926b59f591e
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v7
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:025de0b541bcc6cfbf508e4201aaa37b51d34daaf6d52e5e2753e29a8ddaa869
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm64
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:cdb016ae00b41734af6fea1d05bda932944cf4d04e167c45cf42512bf2ff93fb
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/386
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:c0daff6ec752ef9dfee2035ad1c4f9cfdcb13fba486d02c66995a15c4d493e6b
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/ppc64le
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:d1f9f3c042540c4d52b9ba77d82df5aa160be99a3f420afc92cf94b880de5b68
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/riscv64
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:f5cec6b6ae8fa190b456e6bdbc1d71a777ffb1a17970f8dec034d84ad2dc56ab
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/s390x
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:25bd5820aca090ae0e7d4a0ac958f97908500a08dde95ea306e08de08b13f87a
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.type:   attestation-manifest
+    vnd.docker.reference.digest: sha256:28d91bdce70ad09025ea901458fdd149259d8e05982ade79d4ef2c0d9470eb48
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:91a882db6c9d26137eee64dbaed02c8b409bfdf8e944f14b9cacfd5946decaad
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest: sha256:c845dbb6cc5389ab1bc5aa9af14edb460108dcf72090e3ee14c120c983b98625
+    vnd.docker.reference.type:   attestation-manifest
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:eb4ef7e98b1db1bd81ae68198fe620077c8d6b9f9c638cb612ffd94621e793f1
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest: sha256:aa6b84a1f676a8922a9ba433134dd10dc232f4dd73fdf3c414829926b59f591e
+    vnd.docker.reference.type:   attestation-manifest
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:4177c41b863b7b8455a0d210994e2d00025fc67267369725143705080d2f3ef3
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.type:   attestation-manifest
+    vnd.docker.reference.digest: sha256:025de0b541bcc6cfbf508e4201aaa37b51d34daaf6d52e5e2753e29a8ddaa869
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:6fcf150e92ce6852b5ce7d371198a39412b73c9483cbc7b3f82b2d6cff584e5c
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest: sha256:cdb016ae00b41734af6fea1d05bda932944cf4d04e167c45cf42512bf2ff93fb
+    vnd.docker.reference.type:   attestation-manifest
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:a3b4db790a85fc3ec56f09c338dd7724334ee616182d8ba43793cf71a8b30d5d
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest: sha256:c0daff6ec752ef9dfee2035ad1c4f9cfdcb13fba486d02c66995a15c4d493e6b
+    vnd.docker.reference.type:   attestation-manifest
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:8643b1fd6e1e5e38e1d8e47f7065ca6655c684c7b93607e1dd13dccc8b7924d1
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest: sha256:d1f9f3c042540c4d52b9ba77d82df5aa160be99a3f420afc92cf94b880de5b68
+    vnd.docker.reference.type:   attestation-manifest
+               
+  Name:        docker.io/nginxinc/nginx-unprivileged:1.27-alpine@sha256:e8397bfc8525dc92ae3db02413ce5c5170d56459add5a8f36ee55c7faf285867
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.type:   attestation-manifest
+    vnd.docker.reference.digest: sha256:f5cec6b6ae8fa190b456e6bdbc1d71a777ffb1a17970f8dec034d84ad2dc56ab
+
+$ docker buildx imagetools inspect postgres:16-alpine
+Name:      docker.io/library/postgres:16-alpine
+MediaType: application/vnd.oci.image.index.v1+json
+Digest:    sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+           
+Manifests: 
+  Name:        docker.io/library/postgres:16-alpine@sha256:9d9e487c1bd6413c52ccb3c02f46c8e37fa1e1d1a32a84519eb4e68d0ad1da30
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/amd64
+  Annotations: 
+    org.opencontainers.image.base.name:       alpine:3.24
+    org.opencontainers.image.created:         2026-11-18T21:30:18Z
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+    org.opencontainers.image.version:         16.16-alpine3.24
+    com.docker.official-images.bashbrew.arch: amd64
+    org.opencontainers.image.base.digest:     sha256:0f49f331d9212aff11b932863be4eb01cdf962969aa86dab7d1ee21ac6f5f52b
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:bc5e33d7699ae7a3467bd58af5552b64eb61ef2d7bc705b1d312fd83498e5fe6
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: amd64
+    vnd.docker.reference.digest:              sha256:9d9e487c1bd6413c52ccb3c02f46c8e37fa1e1d1a32a84519eb4e68d0ad1da30
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:f9033c333585b55661ab030434d48fa578b1d7c148af5286da91f9eefdbeee18
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v6
+  Annotations: 
+    org.opencontainers.image.version:         16.16-alpine3.24
+    com.docker.official-images.bashbrew.arch: arm32v6
+    org.opencontainers.image.base.digest:     sha256:24744e247e00c323a54ca655da31f3ac39761bab0247939599b711d7f7a4b0e3
+    org.opencontainers.image.base.name:       alpine:3.24
+    org.opencontainers.image.created:         2026-11-18T21:40:52Z
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:4350f3124f569bf767f07c2b3a89e797570c56cb3d062cfea00ca7aa5fe3097f
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm32v6
+    vnd.docker.reference.digest:              sha256:f9033c333585b55661ab030434d48fa578b1d7c148af5286da91f9eefdbeee18
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:ec58755b53caefae5d29141db9c9c8cbf82985491198dd281ee5d340ff2bc737
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v7
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm32v7
+    org.opencontainers.image.base.digest:     sha256:d8d3f7634d0afcb22c20139248d0255a89cf7807c2e96a7c7ff0ab0217ef557b
+    org.opencontainers.image.base.name:       alpine:3.24
+    org.opencontainers.image.created:         2026-11-18T21:45:42Z
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+    org.opencontainers.image.version:         16.16-alpine3.24
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:563c6fc2f167a8d2d011948e6ad2e11237ff7b121a087f3302793a0680ea417a
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.type:                attestation-manifest
+    com.docker.official-images.bashbrew.arch: arm32v7
+    vnd.docker.reference.digest:              sha256:ec58755b53caefae5d29141db9c9c8cbf82985491198dd281ee5d340ff2bc737
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:ddc1c45d23db7f0702f5a2727e28f24cbb75746f625c8c5083a190e50cf01740
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm64/v8
+  Annotations: 
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+    org.opencontainers.image.version:         16.16-alpine3.24
+    com.docker.official-images.bashbrew.arch: arm64v8
+    org.opencontainers.image.base.digest:     sha256:1829893486be257df5049ab3b7fc95afbd0fc09d89803cbc580bda1ba5386b29
+    org.opencontainers.image.base.name:       alpine:3.24
+    org.opencontainers.image.created:         2026-11-18T21:30:24Z
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:ea3124c512aba93a9121b72a39a21d20c58dd9a3f204e2d1d657f62ebf20fc04
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm64v8
+    vnd.docker.reference.digest:              sha256:ddc1c45d23db7f0702f5a2727e28f24cbb75746f625c8c5083a190e50cf01740
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:ec01575596ef6fecee0f5915bcff67ec9d832dadf8934f76dfa07a85cab20f5d
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/386
+  Annotations: 
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+    org.opencontainers.image.version:         16.16-alpine3.24
+    com.docker.official-images.bashbrew.arch: i386
+    org.opencontainers.image.base.digest:     sha256:55d68c85222dd92297b0f8885354739d89f0dc17fc2f903c49dc1d9c129c3d6a
+    org.opencontainers.image.base.name:       alpine:3.24
+    org.opencontainers.image.created:         2026-11-18T21:31:58Z
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:92fee420e5bb9a7e4055bdf3c167249ab89d4dc5e08dfa3b30e3e3ceae998c42
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: i386
+    vnd.docker.reference.digest:              sha256:ec01575596ef6fecee0f5915bcff67ec9d832dadf8934f76dfa07a85cab20f5d
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:185f550856f9a93728a33098d4439b96fe046e161083a5116a91021acb2f609c
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/ppc64le
+  Annotations: 
+    org.opencontainers.image.created:         2026-11-18T21:57:32Z
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+    org.opencontainers.image.version:         16.16-alpine3.24
+    com.docker.official-images.bashbrew.arch: ppc64le
+    org.opencontainers.image.base.digest:     sha256:7ed963991a76f3bec91d6d651756adc85b4f15d6c3465c2abb1a5ff8f6660a92
+    org.opencontainers.image.base.name:       alpine:3.24
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:dfe1e11d0df240a46d56579b81c414c51cadbc7467efd8b4370abc30df438377
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: ppc64le
+    vnd.docker.reference.digest:              sha256:185f550856f9a93728a33098d4439b96fe046e161083a5116a91021acb2f609c
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:0619e1e31ed680afb4ee5ea553876f7b5c2e5cc60eda102e023d5bc40b403276
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/riscv64
+  Annotations: 
+    org.opencontainers.image.base.digest:     sha256:73e451a4baad87e552641066294eb699c9bcbf1f5cd21bd7c00b66182092386e
+    org.opencontainers.image.base.name:       alpine:3.24
+    org.opencontainers.image.created:         2026-11-21T21:56:39Z
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+    org.opencontainers.image.version:         16.16-alpine3.24
+    com.docker.official-images.bashbrew.arch: riscv64
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:9b84b6d332b4c2575e52dd646b9b7f15f2d1feaac75dfeef78d27e0a56b89903
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: riscv64
+    vnd.docker.reference.digest:              sha256:0619e1e31ed680afb4ee5ea553876f7b5c2e5cc60eda102e023d5bc40b403276
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:21647215957aae2078322568ae7b05c01d815dade0f6e23b804658a24c3829ad
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/s390x
+  Annotations: 
+    org.opencontainers.image.base.digest:     sha256:5731f4bc195f1efc2807ea6a33a2d2bc0f5abbf5bfb799269129f67560209c22
+    org.opencontainers.image.base.name:       alpine:3.24
+    org.opencontainers.image.created:         2026-11-18T23:01:44Z
+    org.opencontainers.image.revision:        ac9627dcf544a8454f212a12ddeebfcdc0803d3e
+    org.opencontainers.image.source:          https://github.com/docker-library/postgres.git#ac9627dcf544a8454f212a12ddeebfcdc0803d3e:16/alpine3.24
+    org.opencontainers.image.url:             https://hub.docker.com/_/postgres
+    org.opencontainers.image.version:         16.16-alpine3.24
+    com.docker.official-images.bashbrew.arch: s390x
+               
+  Name:        docker.io/library/postgres:16-alpine@sha256:be9c344dd2f5759a41fa4eb10b091967610553238c4562812c2cebef4e7687c4
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: s390x
+    vnd.docker.reference.digest:              sha256:21647215957aae2078322568ae7b05c01d815dade0f6e23b804658a24c3829ad
+    vnd.docker.reference.type:                attestation-manifest
+
+$ docker buildx imagetools inspect redis:7.4-alpine
+Name:      docker.io/library/redis:7.4-alpine
+MediaType: application/vnd.oci.image.index.v1+json
+Digest:    sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+           
+Manifests: 
+  Name:        docker.io/library/redis:7.4-alpine@sha256:e4ee3e03ce8f75471f40937a7c6b2b0e500390b6812fcdf5cb32c01295ded446
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/amd64
+  Annotations: 
+    org.opencontainers.image.version:         7.4.12-alpine
+    com.docker.official-images.bashbrew.arch: amd64
+    org.opencontainers.image.base.digest:     sha256:9db2934886712d877c932e07249c75a59e6ca27adfbccc05261987a17bef2d63
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-09T20:08:26Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:b6c3c854696da0e476c50338e03889a1b46692d3b562b9464e6646500eb75a96
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest:              sha256:e4ee3e03ce8f75471f40937a7c6b2b0e500390b6812fcdf5cb32c01295ded446
+    vnd.docker.reference.type:                attestation-manifest
+    com.docker.official-images.bashbrew.arch: amd64
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:6e45ab2cde8c56025746b3b55e06a199f2f34707b3ff0c2eb1fbc8c5998610a3
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v6
+  Annotations: 
+    org.opencontainers.image.version:         7.4.12-alpine
+    com.docker.official-images.bashbrew.arch: arm32v6
+    org.opencontainers.image.base.digest:     sha256:75a73971e1c3898cb1e273c3d1b5c51cd76c900b4ba21c0273f4d32fd7506c96
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-09T20:08:03Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:69ca2556301353c37b9102a9c916a76727e4013f6e4437be543d507dd2770bc4
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.type:                attestation-manifest
+    com.docker.official-images.bashbrew.arch: arm32v6
+    vnd.docker.reference.digest:              sha256:6e45ab2cde8c56025746b3b55e06a199f2f34707b3ff0c2eb1fbc8c5998610a3
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:973af33a5e053fb9df16599af28df0216cbea1641e2ee07f55f3ea778b490870
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm/v7
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm32v7
+    org.opencontainers.image.base.digest:     sha256:1d6c98b14f1e5d3f684835947bbd4b2188cd767e6b7e928e8ab35538be7099cd
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-09T20:08:04Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+    org.opencontainers.image.version:         7.4.12-alpine
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:3cf591b65114cda2554b6f5b72c41ae1254d89488be1847b673793def83b457c
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest:              sha256:973af33a5e053fb9df16599af28df0216cbea1641e2ee07f55f3ea778b490870
+    vnd.docker.reference.type:                attestation-manifest
+    com.docker.official-images.bashbrew.arch: arm32v7
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:52d1ea8a654b10f06af3ecda4e9dbcd035c7868b5c49ee7975de917f81de13db
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm64/v8
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: arm64v8
+    org.opencontainers.image.base.digest:     sha256:e233f2058b0628266762f745a2c17e623b418e0090f47d223909d1f9a7d4367e
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-09T20:08:20Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+    org.opencontainers.image.version:         7.4.12-alpine
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:71b3387fa10b3bd595456a5ab0dbed3958c6ceff2117852ec9cbd57360025e13
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest:              sha256:52d1ea8a654b10f06af3ecda4e9dbcd035c7868b5c49ee7975de917f81de13db
+    vnd.docker.reference.type:                attestation-manifest
+    com.docker.official-images.bashbrew.arch: arm64v8
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:0db9cac1970df8aad76ee73ee9cf55f079d11c56f8a359dae37658d2c89a8213
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/386
+  Annotations: 
+    org.opencontainers.image.version:         7.4.12-alpine
+    com.docker.official-images.bashbrew.arch: i386
+    org.opencontainers.image.base.digest:     sha256:23558a66803d145a7de308d51eb337021dd9c216d88d86ddc1b879be9f774e08
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-09T20:08:29Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:90939d5d3f7ce943923b11de4b3969b4e76ed5d15ccff0e2a0e61a948a27cf82
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: i386
+    vnd.docker.reference.digest:              sha256:0db9cac1970df8aad76ee73ee9cf55f079d11c56f8a359dae37658d2c89a8213
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:a824e80743faea53b1ed0a84c66be30beb32755e645b4df7b68554bfe09edf96
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/ppc64le
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: ppc64le
+    org.opencontainers.image.base.digest:     sha256:03dd3707853bb22932b4f0020f2f15097261ad14813f871ba580d313367df999
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-09T20:09:46Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+    org.opencontainers.image.version:         7.4.12-alpine
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:65af306297a1e4624e99c6c1ec529770826dd0490c839c9d5cc1fb509f9736eb
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: ppc64le
+    vnd.docker.reference.digest:              sha256:a824e80743faea53b1ed0a84c66be30beb32755e645b4df7b68554bfe09edf96
+    vnd.docker.reference.type:                attestation-manifest
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:3f9eb842ad54eb030a7a35e50cb991f013866b9c04ea35748f165f1d8d9e25e3
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/riscv64
+  Annotations: 
+    org.opencontainers.image.version:         7.4.12-alpine
+    com.docker.official-images.bashbrew.arch: riscv64
+    org.opencontainers.image.base.digest:     sha256:83dbecfdac58e324392811b60f0810be7f05f8ba16c8ab27fbd2fc71b7c3f680
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-11T21:43:05Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:ec3f5057ddf84ded57808787298965ea9ae014e773e0966ef5ee2ee349331b6d
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.type:                attestation-manifest
+    com.docker.official-images.bashbrew.arch: riscv64
+    vnd.docker.reference.digest:              sha256:3f9eb842ad54eb030a7a35e50cb991f013866b9c04ea35748f165f1d8d9e25e3
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:15c5f8719b3a729b065820452c8bb1b4d515cbe6e359b3c8a3f4a62a42f72789
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/s390x
+  Annotations: 
+    org.opencontainers.image.url:             https://hub.docker.com/_/redis
+    org.opencontainers.image.version:         7.4.12-alpine
+    com.docker.official-images.bashbrew.arch: s390x
+    org.opencontainers.image.base.digest:     sha256:813b35d82c9aecdc0b20f62c64a9777277d4ac40b6de9b0fc3d8ed1d7fc74f94
+    org.opencontainers.image.base.name:       alpine:3.22
+    org.opencontainers.image.created:         2026-11-09T20:06:45Z
+    org.opencontainers.image.revision:        346d38e447b5f2266de15081b60f952448c93594
+    org.opencontainers.image.source:          https://github.com/redis/docker-library-redis.git#346d38e447b5f2266de15081b60f952448c93594:alpine
+               
+  Name:        docker.io/library/redis:7.4-alpine@sha256:6ea4b935f699ca3e2a04edbe8d79dc4232b52749b265f0e2e9c16d526f5f53b3
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    com.docker.official-images.bashbrew.arch: s390x
+    vnd.docker.reference.digest:              sha256:15c5f8719b3a729b065820452c8bb1b4d515cbe6e359b3c8a3f4a62a42f72789
+    vnd.docker.reference.type:                attestation-manifest
+

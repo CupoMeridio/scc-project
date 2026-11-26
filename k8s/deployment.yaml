@@ -104,8 +104,8 @@ spec:
           # e 'kubectl rollout restart' consente di caricare le compilazioni locali direttamente
           # nei nodi senza necessitare di un registry remoto esterno. In un deployment di produzione
           # multi-tenant si utilizzano tag semantici immutabili (es. :1.0.0 o SHA del commit).
-          image: diabetes-api:latest
-          # imagePullPolicy: IfNotPresent -> Cerca l'immagine nella cache locale del nodo.
+          image: diabetes-api:1.0.0
+          # imagePullPolicy: IfNotPresent -> Usa il tag semantico pinnato 1.0.0 caricato nei nodi KinD.
           imagePullPolicy: IfNotPresent
           
           # ports: Documenta le porte di rete esposte dal container
@@ -161,6 +161,14 @@ spec:
               cpu: "500m"
               # memory: "256Mi" -> Massimo 256 MB di RAM. Impedisce attacchi mirati a saturare la RAM dell'host!
               memory: "256Mi"
+
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 12
 
           # --------------------------------------------------------------------
           # 5. LIVENESS PROBE (Sonda di Vita)

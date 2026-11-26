@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Area Paziente — Monitoraggio Glucosio</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span>Diabete T1D SaaS</span>
+      <span class="role-pill">Paziente</span>
+    </div>
+    <div class="topbar-user">
+      <span id="navUserName">...</span>
+      <button id="logoutBtn" class="btn btn-outline btn-sm">Esci</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Ultima Glicemia CGM</div>
+        <div class="kpi-value" id="kpiGlucose">--</div>
+        <div class="kpi-sub" id="kpiGlucoseSub">In attesa di lettura</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Limite Dieta Pasto</div>
+        <div class="kpi-value" id="kpiDiet">--</div>
+        <div class="kpi-sub" id="kpiDoctor">Medico: --</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pasti Dichiarati</div>
+        <div class="kpi-value" id="kpiMeals">0</div>
+        <div class="kpi-sub">Storico registrato</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Segnalazioni al Medico</div>
+        <div class="kpi-value" id="kpiFlags">0</div>
+        <div class="kpi-sub">Revisionate dal diabetologo</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Quanti carboidrati stai per assumere a questo pasto?</h2>
+      <p class="muted">Inserisci i grammi di carboidrati previsti (UC02): il sistema acquisisce gli ultimi 60 minuti di CGM ed esegue la previsione a +30 minuti tramite il modello ONNX.</p>
+
+      <form id="mealForm" class="two-col align-end">
+        <div class="form-row mb-0">
+          <label for="carbsInput">Carboidrati del pasto (g)</label>
+          <input id="carbsInput" type="number" min="0" max="300" step="1" value="60" required />
+        </div>
+        <div class="form-row mb-0">
+          <label for="insulinInput">Insulina da pompa / bolo (IU, opzionale)</label>
+          <input id="insulinInput" type="number" min="0" max="100" step="0.1" value="1.5" />
+        </div>
+        <div>
+          <button type="submit" class="btn btn-primary">Richiedi previsione (+30 min)</button>
+        </div>
+      </form>
+
+      <div id="mealOutcomeBox" class="banner hidden"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <h2 class="mb-0">Andamento Glicemia, Pasti ed Esiti</h2>
+        <div class="btn-group" id="rangeButtons">
+          <button type="button" class="btn btn-secondary btn-sm active" data-range="week">Settimanale</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-range="month">Mensile</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-range="year">Annuale</button>
+        </div>
+      </div>
+      <div class="chart-box">
+        <canvas id="patientChart"></canvas>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Storico Pasti e Previsioni</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Data/Ora</th>
+              <th>Carboidrati</th>
+              <th>Glicemia Attuale</th>
+              <th>Previsione +30m</th>
+              <th>Esito</th>
+              <th>Flag Medico</th>
+            </tr>
+          </thead>
+          <tbody id="mealsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/vendor/chart.umd.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/patient.js"></script>
+</body>
+</html>

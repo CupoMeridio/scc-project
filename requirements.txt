@@ -1,6 +1,9 @@
 # Runtime dependencies for production container serving
 # I vincoli >= garantiscono portabilita cross-version sia in container (Python 3.11)
 # sia su workstation moderne degli sviluppatori (Python 3.12, 3.13, 3.14).
+# Questo file è la SORGENTE usata per generare il lock con hash requirements.lock
+# (installato con --require-hashes). Rigenerazione:
+#   pip-compile --generate-hashes --strip-extras --output-file=requirements.lock requirements.txt
 fastapi>=0.115.8
 uvicorn[standard]>=0.34.0
 onnxruntime>=1.20.1

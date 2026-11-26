@@ -24,7 +24,8 @@ spec:
   # type: ClusterIP -> È il tipo di servizio predefinito.
   # Assegna un indirizzo IP virtuale raggiungibile SOLO dall'interno del cluster Kubernetes.
   # MOTIVAZIONE DI SICUREZZA: I pod applicativi non sono esposti direttamente a internet!
-  # L'unico componente autorizzato a parlare con questo Service è l'Ingress NGINX.
+  # L'Ingress non instrada più /predict: l'unico client autorizzato dalla
+  # NetworkPolicy è il backend SaaS (saas_app/ml_client.py).
   type: ClusterIP
 
   # selector: Il meccanismo di aggancio (binding) con i pod.

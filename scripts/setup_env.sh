@@ -154,9 +154,10 @@ else
     echo "[+] Aggiornamento pip, setuptools e wheel..."
     "${TARGET_VENV}/bin/pip" install --upgrade pip setuptools wheel
     
-    echo "[+] Installazione dipendenze base del microservizio e suite di test..."
+    echo "[+] Installazione dipendenze base del microservizio, backend SaaS e suite di test..."
     "${TARGET_VENV}/bin/pip" install \
         -r "${PROJECT_ROOT}/requirements.txt" \
+        -r "${PROJECT_ROOT}/requirements-saas.txt" \
         -r "${PROJECT_ROOT}/requirements-test.txt"
 
     case "${PROFILE}" in

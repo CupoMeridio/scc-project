@@ -273,6 +273,9 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="SaaS Cloud-Native per il monitoraggio predittivo e allerta precoce del Diabete di Tipo 1 (OhioT1DM)",
+    openapi_url=None if settings.ML_ENV == "production" else "/docs/openapi.json",
+    docs_url=None if settings.ML_ENV == "production" else "/docs",
+    redoc_url=None if settings.ML_ENV == "production" else "/redoc",
     lifespan=lifespan
 )
 
@@ -301,7 +304,8 @@ async def security_and_tracing_middleware(request: Request, call_next) -> Respon
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none';"
+    if request.url.path not in ("/docs", "/redoc", "/docs/openapi.json"):
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none';"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-Process-Time-Ms"] = f"{process_time_ms:.2f}"
 

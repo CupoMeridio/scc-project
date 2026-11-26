@@ -1,0 +1,15 @@
+# FILE: k8s/frontend-pdb.yaml
+# RUOLO: PodDisruptionBudget per il Frontend Web UI (almeno 1 replica sempre attiva su 2).
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: diabetes-frontend-pdb
+  namespace: default
+  labels:
+    app: diabetes-frontend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: diabetes-frontend

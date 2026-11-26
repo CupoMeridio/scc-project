@@ -23,9 +23,9 @@ request = function()
     -- Simula una glicemia casuale compresa tra 4.5 e 10.5 mmol/L.
     local current_glucose = 4.5 + (math.random(0, 60) * 0.1)
     
-    -- Simula un bolo di insulina recente (da 0 a 8 U) e carboidrati (da 0 a 60g).
+    -- Simula un livello di insulina (da 0 a 8 U) e tasso di assorbimento CHO Hovorka (da 0.0 a 6.0).
     local recent_insulin = math.random(0, 8) * 1.0
-    local recent_carbs = math.random(0, 60) * 1.0
+    local recent_carbs = math.random(0, 60) * 0.1
 
     -- Genera il payload conforme allo schema OhioT1DM (13 campioni di glucosio in mmol/L + 14 esogeni).
     local payload = string.format([[{

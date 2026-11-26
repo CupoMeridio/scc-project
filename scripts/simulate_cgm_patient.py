@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -341,8 +342,8 @@ def simulate_cgm_stream(
                 m_res = local_client.get("/metrics")
                 if m_res.status_code == 200:
                     metrics_data = m_res.json()
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[!] Telemetria /metrics non disponibile (client locale): {exc}", file=sys.stderr)
             if local_ctx is not None:
                 local_ctx.__exit__(None, None, None)
         elif not local:
@@ -353,8 +354,8 @@ def simulate_cgm_stream(
                 with urllib.request.urlopen(req, context=ctx, timeout=3.0) as resp:
                     if resp.status == 200:
                         metrics_data = json.loads(resp.read().decode("utf-8"))
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[!] Telemetria /metrics non disponibile: {exc}", file=sys.stderr)
 
     # Stampa del report riassuntivo finale
     print("=" * 80)
@@ -396,6 +397,96 @@ def simulate_cgm_stream(
         print(f"  * Conformità SLA (<= 1.0 s):  {metrics_data.get('sla_compliance_rate', 0):.1f}%")
         print(f"  * Distribuzione 7 classi:     {metrics_data.get('risk_class_distribution')}")
         print("-" * 80)
+
+
+def _build_ingest_url(endpoint: str) -> str:
+    """Deriva l'URL interno /api/cgm/ingest da un endpoint /predict o da un URL base (D2)."""
+    url = endpoint.replace("/predict", "/api/cgm/ingest")
+    if url == endpoint and not url.endswith("/ingest"):
+        url = endpoint.rstrip("/") + "/api/cgm/ingest"
+    return url
+
+
+def _read_error_body(err: urllib.error.HTTPError) -> str:
+    try:
+        return err.read().decode("utf-8")
+    except Exception as exc:  # pragma: no cover - solo diagnostico
+        return str(exc)
+
+
+def _print_ingest_error(status_code: int, detail: str, ingest_url: str) -> None:
+    """Spiega l'errore HTTP e, per 401/403, come rimediare (N1, D2)."""
+    print(f"[!] ERRORE HTTP {status_code} da {ingest_url}: {detail}", file=sys.stderr)
+    if status_code == 401:
+        print("    Chiave dispositivo assente, errata o revocata (header X-Device-Key).", file=sys.stderr)
+        print("    Rigenera la chiave con: python -m saas_app.device_cli create --patient <CODICE>", file=sys.stderr)
+    elif status_code == 403 and "non accessibile dall'esterno" in detail:
+        print("    /api/cgm/ingest è solo interno (D2): non è raggiungibile tramite l'Ingress.", file=sys.stderr)
+        print("    Usa il port-forward verso il servizio e l'URL locale:", file=sys.stderr)
+        print("      kubectl port-forward svc/diabetes-saas-service 8080:80", file=sys.stderr)
+        print("      ... --endpoint http://127.0.0.1:8080/predict", file=sys.stderr)
+
+
+def _ingest_records(
+    ingest_url: str,
+    patient_code: str,
+    records: List[Dict[str, Any]],
+    device_key: str,
+    delay: float,
+    insecure: bool,
+    timeout: float = 5.0,
+) -> int:
+    """
+    Invia i campioni a /api/cgm/ingest con l'header X-Device-Key (N1).
+    Ritorna 0 se tutti i campioni sono accettati, altrimenti un codice diverso da zero.
+    """
+    context = ssl._create_unverified_context() if insecure else ssl.create_default_context()
+    if not ingest_url.startswith("https"):
+        context = None
+    # Timestamp ancorato alla mezzanotte UTC: più replay lo stesso giorno
+    # generano la stessa chiave (patient_id, recorded_at) e l'upsert non
+    # duplica le letture.
+    day_base = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    ok = 0
+    for rec in records:
+        recorded_at = (day_base + timedelta(minutes=5 * rec["step_index"])).isoformat()
+        body = json.dumps({
+            "patient_code": patient_code,
+            "glucose_mmol": rec["current_glucose"],
+            "insulin_u": rec["current_insulin"],
+            "cho_rate": rec["current_cho"],
+            "recorded_at": recorded_at,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            ingest_url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Device-Key": device_key,
+                "User-Agent": "CGM-Sensor-Simulator/1.0",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, context=context, timeout=timeout) as resp:
+                # 202 Accepted è la risposta corretta del percorso asincrono
+                # CGM queue -> Ingestion Worker -> PostgreSQL.
+                if resp.status in (200, 201, 202):
+                    ok += 1
+        except urllib.error.HTTPError as err:
+            _print_ingest_error(err.code, _read_error_body(err), ingest_url)
+            return 1
+        except urllib.error.URLError as err:
+            print(f"[!] ERRORE di rete verso {ingest_url}: {err.reason}", file=sys.stderr)
+            print("    Il servizio non è raggiungibile: avvia il port-forward e riprova.", file=sys.stderr)
+            print("      kubectl port-forward svc/diabetes-saas-service 8080:80", file=sys.stderr)
+            print("      ... --endpoint http://127.0.0.1:8080/predict", file=sys.stderr)
+            return 1
+        if delay > 0:
+            time.sleep(delay)
+    print(f"[✓] Ingestione completata su {ingest_url}: {ok}/{len(records)} campioni registrati.")
+    return 0
 
 
 def main() -> None:
@@ -461,6 +552,17 @@ def main() -> None:
         action="store_true",
         help="Esegue l'inferenza in-process usando l'app locale (utile per demo senza cluster attivo)"
     )
+    parser.add_argument(
+        "--ingest",
+        action="store_true",
+        help="Invia i campioni CGM verso l'endpoint SaaS /api/cgm/ingest invece che /predict"
+    )
+    parser.add_argument(
+        "--device-key",
+        type=str,
+        default="",
+        help="Chiave per dispositivo inviata come header X-Device-Key a /api/cgm/ingest (N1)"
+    )
 
     args = parser.parse_args()
 
@@ -469,6 +571,16 @@ def main() -> None:
         print(f"[!] ERRORE: La cartella del dataset '{args.data_dir}' non esiste.", file=sys.stderr)
         print("    Assicurati di trovarti nella radice del progetto o specifica --data-dir o --csv.", file=sys.stderr)
         sys.exit(1)
+
+    if args.ingest:
+        ingest_url = _build_ingest_url(args.endpoint)
+        if not args.device_key:
+            print("[!] ERRORE: --ingest richiede --device-key (chiavi per dispositivo, N1).", file=sys.stderr)
+            print(f"    Ottienila con: python -m saas_app.device_cli create --patient {args.patient}", file=sys.stderr)
+            sys.exit(2)
+        csv_file = args.csv or (args.data_dir / args.patient / f"{args.patient}-ws-{args.split}(t+30).csv")
+        records = load_patient_records(csv_file, max_steps=args.steps)
+        sys.exit(_ingest_records(ingest_url, args.patient, records, args.device_key, args.delay, args.insecure))
 
     simulate_cgm_stream(
         patient_id=args.patient,

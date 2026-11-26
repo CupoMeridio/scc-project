@@ -1,0 +1,111 @@
+# FILE: k8s/redis.yaml
+# RUOLO: Coda asincrona Redis per buffering dei campioni CGM (DMZ Queue).
+# L'AOF risiede su PVC: i campioni in attesa sopravvivono al restart del pod.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: default
+  labels:
+    app: diabetes-redis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diabetes-redis
+  namespace: default
+  labels:
+    app: diabetes-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diabetes-redis
+  template:
+    metadata:
+      labels:
+        app: diabetes-redis
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:7.4-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+          # La password non finisce nella command line del processo: viene scritta
+          # in un file 0600 dentro il PVC. noeviction trasforma la pressione
+          # memoria in backpressure (503 al client) invece di droppare la coda.
+          command:
+            - sh
+            - -c
+            - |
+              umask 077
+              printf 'requirepass %s\nappendonly yes\nappendfsync everysec\ndir /data\nmaxmemory 96mb\nmaxmemory-policy noeviction\n' "$REDIS_PASSWORD" > /data/redis.conf
+              exec redis-server /data/redis.conf
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: saas-secrets
+                  key: REDIS_PASSWORD
+          ports:
+            - containerPort: 6379
+              name: redis
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "96Mi"
+            limits:
+              cpu: "250m"
+              memory: "192Mi"
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: default
+  labels:
+    app: diabetes-redis
+spec:
+  type: ClusterIP
+  selector:
+    app: diabetes-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP

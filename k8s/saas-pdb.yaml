@@ -1,0 +1,15 @@
+# FILE: k8s/saas-pdb.yaml
+# RUOLO: PodDisruptionBudget per il Backend SaaS (almeno 1 replica sempre attiva su 2).
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: diabetes-saas-pdb
+  namespace: default
+  labels:
+    app: diabetes-saas-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: diabetes-saas-api

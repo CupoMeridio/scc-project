@@ -1,0 +1,19 @@
+# FILE: k8s/ml-headless-service.yaml
+# RUOLO: Service Headless per permettere al Center Manager di raccogliere /metrics da tutti i pod ML.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-forecasting-headless
+  namespace: default
+  labels:
+    app: diabetes-forecasting-api
+spec:
+  clusterIP: None
+  selector:
+    app: diabetes-forecasting-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP

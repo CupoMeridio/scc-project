@@ -31,25 +31,20 @@
 > L'infrastruttura Cloud (cluster KinD multi-nodo, Dockerfile multi-stage non-root, Ingress NGINX con Rate Limiting, politiche di sicurezza Kubernetes, stress test `wrk` e script di deployment e validazione automatizzati pronti per l'integrazione CI/CD) è **completamente disaccoppiata dal tipo di modello**. 
 > Qualora venga confermata l'Opzione 1 oppure assegnata l'Opzione 2 (Parkinson) o 3 (Alzheimer), l'**infrastruttura rimarrà identica al 100%**: risulterà sufficiente sostituire l'artefatto compilato `model/model.onnx` e aggiornare lo schema Pydantic per le nuove feature.
 
-### Mappa dell'Architettura: dai Dati alla Risposta
+### Mappa dell'Architettura: dai Dati alla Risposta (Single-Center Multi-Role SaaS)
 
 ```text
-train_lstm.py
-  addestra la rete ricorrente sui dati reali OhioT1DM ed esporta il modello
-        ↓ model.onnx + model_metadata.json
-Dockerfile
-  compila l'immagine container minimale e sicura (non-root)
-        ↓ immagine caricata nei nodi worker KinD
-Deployment → gestisce 3 repliche del pod con anti-affinity multi-nodo
-        ↓
-Ingress NGINX → Service (ClusterIP) → Pod FastAPI
-                                        middleware → validazione Pydantic [13 G + 14 Exog]
-                                                   → inferenza ONNX Runtime C++
-                                                   → physiological clamp ([1.0, 35.0] mmol/L) & risk class (1..7)
-                                                   → risposta JSON + X-Request-ID
+Browser / Utente (Paziente, Diabetologo, Center Manager)
+        ↓ HTTPS obbligatorio (redirect 308 da HTTP)
+Ingress NGINX (TLS, Rate Limiting, Header OWASP)
+   ├── "/"               ──▶ Frontend (2 repliche NGINX non-root, HTML/CSS/JS + Chart.js locale)
+   └── "/api/*"          ──▶ SaaS API (2 repliche FastAPI: IAM Cookie HttpOnly, RBAC, Audit atomico)
+                               ├──▶ Redis Queue ──▶ Ingestion Worker (2 repliche) ──┐
+                               ├──▶ PostgreSQL HA (CloudNativePG Primary + Standby) ◀┘
+                               └──▶ ML Inference Service (ClusterIP interno, 3 repliche ONNX)
 ```
 
-Il **Deployment** mantiene 3 repliche distribuite sui nodi worker; il **Service** fornisce un punto di accesso interno stabile; l'**Ingress NGINX** perimetra il cluster applicando rate limiting e instradamento. All'interno del container, il **middleware** misura la latenza e inietta header OWASP, **Pydantic** valida la sequenza temporale e l'endpoint **/predict** esegue l'inferenza proteggendo l'output con il guardrail fisiologico e determinando la classe di rischio clinico.
+Il gateway **Ingress NGINX** espone verso l'esterno solo il portale web (`/`) e le API autenticate (`/api/*`), forzando HTTPS (`ssl-redirect: "true"` + `force-ssl-redirect: "true"`). Il microservizio ML (`diabetes-forecasting-service`, 3 repliche con `podAntiAffinity` e `PDB`) resta **strettamente interno al cluster** e protetto da **NetworkPolicy `default-deny` + allowlist**. L'ingestione CGM (`/api/cgm/ingest`) accoda su **Redis** (`202 Accepted`) e viene svuotata in modo idempotente da 2 repliche di **Ingestion Worker** verso **PostgreSQL HA (Primary + Standby sincrona via CloudNativePG, con backup giornalieri `pg_dump`)**. La coda usa una lista in-flight con ack esplicito, retry e dead-letter queue: i campioni non si perdono se un worker crasha. Schema e popolamento iniziale girano tramite **Alembic** dentro un **Kubernetes Job** dedicato (`k8s/seed-job.yaml`).
 
 ---
 
@@ -61,8 +56,8 @@ La traccia ufficiale dell'esame definisce 8 compiti sequenziali. La tabella segu
 | :--- | :--- | :--- | :--- | :--- |
 | **Task A** | Addestramento offline del modello ML | `make train` | `.\venv\Scripts\python.exe model/train_lstm.py` | [`model/train_lstm.py`](model/train_lstm.py) |
 | **Task B** | Salvataggio artefatto e costruzione Web App per inferenza | `make test` | `.\venv\Scripts\pytest.exe tests/ -v` | [`app/main.py`](app/main.py), [`app/schemas.py`](app/schemas.py) |
-| **Task C** | Containerizzazione hardened con Docker Desktop | `make build` | `docker build -t diabetes-api:latest -f docker/Dockerfile .` | [`docker/Dockerfile`](docker/Dockerfile) |
-| **Task D & E** | Analisi vulnerabilità CVE e patching con Docker Scout | `make scan` | `docker scout cves diabetes-api:latest` | [`docker/Dockerfile`](docker/Dockerfile) |
+| **Task C** | Containerizzazione multi-stage non-root con Docker Desktop | `make build` | `docker build -t diabetes-api:1.0.0 -f docker/Dockerfile .` | [`docker/Dockerfile`](docker/Dockerfile), [`docker/Dockerfile.saas`](docker/Dockerfile.saas), [`docker/Dockerfile.frontend`](docker/Dockerfile.frontend) |
+| **Task D & E** | Analisi vulnerabilità CVE e patching con Docker Scout | `make scan` | `docker scout cves diabetes-api:1.0.0` | [`docker/Dockerfile`](docker/Dockerfile) |
 | **Task F** | Creazione cluster Kubernetes (1 Control-Plane + 2 Worker) | `make cluster-up` | `.\scripts\deploy_k8s.ps1` | [`k8s/kind-config.yaml`](k8s/kind-config.yaml) |
 | **Task G** | Benchmark `wrk` e validazione automatica dei vincoli SLA su Linux/macOS | `make stress-test` | `.\scripts\run_stress_test.ps1` | [`scripts/run_stress_test.sh`](scripts/run_stress_test.sh), [`scripts/test_predict.lua`](scripts/test_predict.lua) |
 | **Task H** | Deployment finale della Web App sul cluster Kubernetes | `make deploy` | `.\scripts\deploy_k8s.ps1` | [`k8s/deployment.yaml`](k8s/deployment.yaml), [`k8s/ingress.yaml`](k8s/ingress.yaml) |
@@ -76,6 +71,17 @@ Assicurarsi che l'ambiente host soddisfi i seguenti requisiti tecnici prima dell
 * **Su Linux:** Shell Bash, `make`, `git`, `curl` e `sudo`. Lo script `make setup` usa APT e il repository Debian 13 (Trixie); su Ubuntu, Fedora e altre distribuzioni occorre installare i prerequisiti con il gestore di pacchetti appropriato.
 * **Su macOS:** Homebrew, Bash, `make`, `git` e `curl`. `make setup` installa Docker Desktop, KinD, kubectl, `wrk`, `jq` e Python 3.
 * **Su Windows (10/11):** **Docker Desktop** attivo con backend WSL2 abilitato e shell **PowerShell**.
+
+---
+
+### Approvvigionamento del Dataset (OhioT1DM — Decisione D1)
+
+Il dataset clinico **non** è distribuito con questo repository e **non** è incluso in alcuna immagine container. Il repository GitHub è pubblico e OhioT1DM è rilasciato sotto un accordo d'uso che ne vieta la ridistribuzione.
+
+* **Fonte:** il bundle ufficiale OhioT1DM `GlucoseClassification`, ottenuto sotto tale accordo (12 pazienti, 24 file CSV).
+* **Dove collocarlo (in locale):** nella radice del repository, con questa struttura: `Diabetes/GlucoseClassification/<codice_paziente>/<codice_paziente>-ws-testing(t+30).csv` (e `-ws-training(t+30).csv`). Questo percorso viene letto direttamente da `make train` e `make simulate-cgm`.
+* **Come raggiunge il Seed Job (nel cluster):** [`k8s/kind-config.yaml`](k8s/kind-config.yaml) dichiara `extraMounts`, che mappa la cartella locale `Diabetes/GlucoseClassification/` su `/mnt/ohiot1dm` in ogni nodo KinD. Il Job di seed demo ([`k8s/seed-demo-job.yaml`](k8s/seed-demo-job.yaml)) monta quel percorso in sola lettura e lo legge tramite la variabile d'ambiente `DATASET_DIR`. I volumi `hostPath` ignorano `fsGroup`: i file CSV devono essere leggibili da tutti (es. `chmod -R a+r Diabetes`).
+* **Senza la cartella locale:** `make train` non può essere eseguito e `make seed-demo` crea comunque gli account demo ma registra un avviso e non carica alcuna serie storica CGM.
 
 ---
 
@@ -130,27 +136,32 @@ Caricamento dell'immagine locale nei nodi KinD e rilascio del deployment a 3 rep
 make deploy
 ```
 
-#### Passo 8: Verifica degli Endpoint e Interfaccia Web Interattiva
-Verifica diretta degli endpoint da riga di comando:
+#### Passo 8: Verifica degli Endpoint e Portale Web HTTPS
+Verifica diretta dell'isolamento Ingress, redirect HTTPS e salute SaaS da riga di comando:
 ```bash
 make test-endpoint
 ```
-In alternativa, accesso alle interfacce web interattive tramite browser:
-* **Documentazione Interattiva OpenAPI / Swagger UI:** [http://localhost/docs](http://localhost/docs)
-* **Specifiche OpenAPI Redoc:** [http://localhost/redoc](http://localhost/redoc)
-* **Probe di Liveness:** [http://localhost/health](http://localhost/health)
-* **Probe di Readiness:** [http://localhost/ready](http://localhost/ready)
-* **Telemetria di Servizio & Monitoring:** [http://localhost/metrics](http://localhost/metrics)
+Accesso al portale web HTTPS (con cookie HttpOnly e RBAC server-side per Paziente, Diabetologo e Center Manager):
+* **Portale Web SaaS (Login & Dashboard):** [https://localhost](https://localhost)
+* **Health / Readiness SaaS:** [https://localhost/api/health](https://localhost/api/health) / [https://localhost/api/ready](https://localhost/api/ready)
+* **Seed Demo opzionale (Job dedicato):** `make seed-demo` — genera password demo casuali e le stampa una sola volta nel terminale. Il Job di seed le applica quando crea gli account demo (database vuoto). Nessuna credenziale demo è nel repository o viene applicata da `make deploy`.
 
 #### Passo 8b: Simulazione Stream Sensore CGM dal Dataset Reale (OhioT1DM)
-Per simulare il flusso continuo di campionamento del sensore CGM e del diario pasti, riproducendo i dati clinici dei pazienti dal dataset verso l'API:
+Per eseguire la simulazione in-process (senza cluster):
 ```bash
 make simulate-cgm
-# Oppure con parametri personalizzati (es. paziente 591, 20 campioni, delay 0.3s):
-python scripts/simulate_cgm_patient.py --patient 591 --steps 20 --delay 0.3
-# Modalità locale in-memory (senza cluster attivo):
-python scripts/simulate_cgm_patient.py --local --steps 15
 ```
+`/api/cgm/ingest` è un endpoint **interno** (D2): non è raggiungibile tramite l'Ingress, quindi l'ingestione deve passare da un port-forward e richiede una chiave per dispositivo inviata nell'header `X-Device-Key`. La chiave è nel Secret `device-keys` creato dal Job di seed (una voce per paziente, decisione N1/Q3):
+```bash
+# In un terminale, apri il port-forward verso il servizio SaaS:
+kubectl port-forward svc/diabetes-saas-service 8080:80
+# In un altro terminale, invia i campioni con la chiave del paziente:
+make simulate-cgm-ingest PATIENT=591
+# Oppure manualmente:
+python scripts/simulate_cgm_patient.py --ingest --endpoint http://127.0.0.1:8080/predict --patient 591 \
+  --device-key "$(kubectl get secret device-keys -o jsonpath='{.data.patient_591}' | base64 -d)"
+```
+Su Windows, `scripts/simulate_cgm_ingest.ps1` esegue lo stesso flusso (legge la chiave dal Secret, apre il port-forward ed esegue il simulatore).
 
 #### Passo 9: Stress Test di Carico e Validazione SLA (Task G)
 Esecuzione del benchmark automatizzato con `wrk` per convalidare i requisiti stringenti di Service Level Agreement stabiliti dalla traccia (Throughput $\ge 83.33\text{ RPS}$, Latenza $p99 \le 1000\text{ ms}$, Tasso di Errore $< 0.5\%$, corrispondente a una disponibilità del $99.5\%$):
@@ -220,30 +231,33 @@ Predisposizione automatica del virtual environment:
 
 #### Passo 3: Compilazione e Audit Docker Scout
 ```powershell
-docker build -t diabetes-api:latest -f docker/Dockerfile .
-docker scout quickview diabetes-api:latest
-docker scout cves diabetes-api:latest
+docker build -t diabetes-api:1.0.0 -f docker/Dockerfile .
+docker build -t diabetes-saas-api:1.0.0 -f docker/Dockerfile.saas .
+docker build -t diabetes-frontend:1.0.0 -f docker/Dockerfile.frontend .
+docker scout quickview diabetes-api:1.0.0
+docker scout cves diabetes-api:1.0.0
 ```
 
 #### Passo 4: Deployment Automatico sul Cluster
 ```powershell
 .\scripts\deploy_k8s.ps1
 ```
-*(Creazione del cluster KinD, caricamento dell'immagine locale, applicazione di NGINX Ingress e avvio delle repliche)*.
+*(Crea il cluster KinD, carica le immagini `:1.0.0`, installa NGINX Ingress v1.15.1, CloudNativePG HA, Redis, Seed Job Alembic, SaaS API, Worker e Frontend)*.
 
 #### Passo 5: Test degli endpoint
 ```powershell
-Invoke-RestMethod -Uri http://localhost/health
-Invoke-RestMethod -Uri http://localhost/ready
-Invoke-RestMethod -Uri http://localhost/metrics
+curl.exe -s -o NUL -w "%{http_code}\n" http://localhost/          # atteso 308
+curl.exe -s -k -o NUL -w "%{http_code}\n" https://localhost/predict  # atteso 404 (solo interno)
+curl.exe -s -k https://localhost/api/health
+curl.exe -s -k https://localhost/api/ready
 ```
-Accesso a [http://localhost/docs](http://localhost/docs) per l'interazione grafica con le API.
+Accesso a [https://localhost](https://localhost) nel browser per il portale web autenticato.
 
 #### Passo 6: Esecuzione Stress Test con `wrk` (tramite container Docker)
 ```powershell
 .\scripts\run_stress_test.ps1
 ```
-Lo script stampa le statistiche di `wrk`, ma non verifica automaticamente l'esito SLA: confrontare throughput, p99 e risposte non-2xx con le soglie indicate.
+Di default (`-TargetHost internal`), lo script apre un `kubectl port-forward` verso il servizio ML interno, salva l'output grezzo in `docs/audit_reports/wrk_<data>.txt` e verifica programmaticamente throughput $\ge 83.33$ RPS, latenza p99 $\le 1000$ ms ed errori $\le 0.50\%$, uscendo con codice diverso da zero in caso di fallimento.
 
 ---
 
@@ -266,30 +280,36 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 2. **Repliche e Resilienza Pod Kubernetes:**
    La distribuzione di 3 repliche pod su 2 nodi worker tramite `podAntiAffinity` (preferred) massimizza la ridondanza applicativa. L'adozione del PodDisruptionBudget (PDB con `minAvailable: 2`) e della strategia di `RollingUpdate` (`maxSurge: 1`, `maxUnavailable: 0`) garantisce l'alta disponibilità continua e l'aggiornamento a zero-downtime, rispettando l'obiettivo di uptime del 99.5%.
 3. **NGINX Ingress come Perimetro di Sicurezza & Terminazione TLS:**
-   Configurato come gateway perimetrale con Rate Limiting (1000 RPS con burst 5x per supportare lo stress test locale con wrk ed evitare falsi positivi 429), Connection Limiting (150 connessioni per IP contro Slowloris), terminazione TLS su porta 443 con certificato e chiave generati on-the-fly con SAN (`DNS:localhost, IP:127.0.0.1`), direttiva `ssl-redirect: "false"` per consentire test HTTP/HTTPS diretti senza conflitti 308, restrizione verbi HTTP (solo GET e POST) e iniezione di header di sicurezza OWASP.
+   Configurato come gateway perimetrale con Rate Limiting (1000 RPS con burst 5x per IP, dimensionato ~12 volte oltre l'obiettivo di 83.33 RPS per consentire lo stress test `wrk` da singolo IP senza falsi positivi 429), Connection Limiting (150 connessioni per IP contro Slowloris), terminazione TLS su porta 443 con certificato e chiave generati on-the-fly con SAN (`DNS:localhost, IP:127.0.0.1`), redirect HTTP→HTTPS obbligatorio (`ssl-redirect: "true"` e `force-ssl-redirect: "true"`) e nessuna annotazione snippet personalizzata (`allow-snippet-annotations=false`, D3). I verbi di scrittura non ammessi (`PUT`/`DELETE`) ricevono `405` da `frontend/nginx.conf` su `/` e dal routing FastAPI su `/api/*`.
 
 ---
 
-## 5. Architettura di Sicurezza & Hardening NGINX
+## 5. Architettura di Sicurezza & Controlli Perimetrali
 
 | Controllo di Sicurezza | Modello di Minaccia & Motivazione | Meccanismo di Implementazione |
 | :--- | :--- | :--- |
-| **Container Non-Root** | Previene Container Breakout ed escalation dei privilegi sul nodo host. | `USER 10001:10001` in Dockerfile, `runAsNonRoot: true` in K8s Pod Security Context. |
-| **Multi-Stage Build** | Riduce la superficie d'attacco; compilatori e strumenti di build sono esclusi dall'immagine finale. | Dockerfile a doppio stadio (`builder` -> `runner`), base image `python:3.11-slim`. |
-| **Scansione CVE con Docker Scout** | Identifica Common Vulnerabilities and Exposures nel sistema operativo e nelle librerie Python prima del rilascio. | `docker scout cves` & `docker scout quickview`. |
+| **Container Non-Root** | Previene Container Breakout ed escalation dei privilegi sul nodo host. | `USER 10001:10001` (`101` per NGINX unprivileged), `runAsNonRoot: true`, `readOnlyRootFilesystem: true`. |
+| **Multi-Stage Build** | Riduce la superficie d'attacco; compilatori e strumenti di build sono esclusi dall'immagine finale. | Dockerfile a doppio stadio (`builder` -> `runner`), base image fissata per digest (`python:3.11.11-slim@sha256:081075da…`). |
+| **Scansione CVE con Docker Scout** | Identifica Common Vulnerabilities and Exposures nel sistema operativo e nelle librerie Python prima del rilascio. | `docker scout cves` & `docker scout quickview` (salvati in `docs/audit_reports/`). |
 | **Rate Limiting** | Previene attacchi Denial of Service (DoS) e garantisce la corretta ripartizione della capacità tra client concorrenti. | `nginx.ingress.kubernetes.io/limit-rps: "1000"`, `limit-burst-multiplier: "5"`. |
 | **Connection Limiting** | Mitiga attacchi Slowloris e l'esaurimento della tabella dei socket/connessioni sul gateway. | `nginx.ingress.kubernetes.io/limit-connections: "150"`. |
-| **Terminazione TLS / HTTPS** | Cifratura end-to-end dei dati biometrici in transito (HIPAA & GDPR Art. 32). | Secret `diabetes-tls-cert` su porta 443, certificato con SAN `DNS:localhost, IP:127.0.0.1`. |
+| **Terminazione TLS / HTTPS** | Cifratura end-to-end dei dati biometrici in transito (HIPAA & GDPR Art. 32). | Secret `diabetes-tls-cert` su porta 443, `ssl-redirect: "true"`, `force-ssl-redirect: "true"`. |
 | **Dimensione Massima Body HTTP** | Previene attacchi di esaurimento memoria (Memory Starvation) dato che il payload clinico pesa < 2 KB. | `nginx.ingress.kubernetes.io/proxy-body-size: "1m"`. |
-| **Restrizione Metodi HTTP** | Principio del Minimo Privilegio: sono ammessi solo `GET` (health/ready/metrics) e `POST` (predict). | NGINX snippet: `if ($request_method !~ ^(GET|POST|HEAD)$) { return 405; }`. |
-| **Header HTTP OWASP** | Difesa in profondità (Defense-in-Depth) per imporre standard moderni di sicurezza HTTP. | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`. |
-| **Quote di Risorse K8s** | Previene attacchi DoS interni e monopolio delle risorse CPU/RAM sul nodo host (Noisy Neighbor). | Limiti container: `cpu: 500m`, `memory: 256Mi`. |
+| **Restrizione Metodi HTTP** | Principio del Minimo Privilegio: il portale statico accetta solo `GET`/`HEAD` (`405` altrimenti); le API SaaS instradano solo i verbi validi (`405` su `PUT`/`DELETE`). | Applicato nativamente in `frontend/nginx.conf` e nei router FastAPI (zero snippet Ingress). |
+| **Header HTTP OWASP** | Difesa in profondità (Defense-in-Depth) per imporre standard moderni di sicurezza HTTP. | Iniettati da `frontend/nginx.conf` e middleware FastAPI (`X-Frame-Options`, `X-Content-Type-Options`, `CSP`, `HSTS`). |
+| **Quote di Risorse K8s** | Previene attacchi DoS interni e monopolio delle risorse CPU/RAM sul nodo host (Noisy Neighbor). | Limiti container impostati su tutti i pod ML (`500m`/`256Mi`), SaaS, Worker, Redis e PostgreSQL HA. |
 
 ### 5.1 Validazione dei Dati e Ciclo di Vita del Modello
 - **Contratto dell'Input:** Pydantic v2 garantisce l'integrità strutturale della serie temporale (13 misurazioni di glucosio in mmol/L e 14 variabili esogene), bloccando valori fuori range fisiologico e valori non numerici (`NaN`, `Inf`) con `HTTP 422 Unprocessable Entity` prima dell'esecuzione dell'algebra lineare.
 - **Safety Clamp Fisiologico & Early Warning:** L'output è vincolato nel range vitale $[1.0, 35.0]\text{ mmol/L}$ e categorizzato su 7 classi di rischio per allertare il paziente in anticipo su ipo/iperglicemie.
 - **Readiness Gate Fail-Closed:** `/ready` restituisce `HTTP 503 Service Unavailable` se la sessione ONNX o i parametri di normalizzazione dello scaler non sono caricati e validati in memoria, escludendo il pod dal routing prima di generare errori utente.
 - **Supply Chain Security & Checksum SHA256:** Gli artefatti `model.onnx` e `model.onnx.data` sono verificati all'avvio confrontando l'impronta crittografica SHA256 con quella archiviata in `model/model_metadata.json`.
+- **Perimetro Clinico — Non è un Dispositivo Medico, Nessuna Dose di Insulina:** Il servizio prevede la glicemia **a +30 minuti** in 7 classi di rischio come solo supporto decisionale di allerta precoce. **Non** calcola, consiglia né valida dosi di insulina o rapporti carboidrati; insulina attiva (IOB) e calcolo del bolo sono esplicitamente fuori perimetro e non devono mai essere derivati da questo output. È un artefatto prototipale, non un dispositivo medico certificato (nessuna marcatura CE/FDA), e non sostituisce il giudizio clinico.
+- **Limiti del Modello (dichiarati, non nascosti):** La LSTM è addestrata sulla coorte **OhioT1DM** (piccola, monocentrica) con 13 passi di storia CGM e 14 variabili esogene. La precisione degrada con dati del sensore mancanti/radi, pasti non annunciati, attività fisica e pazienti fuori dalla distribuzione di addestramento. MAE e bias sono mostrati solo quando esiste almeno una coppia previsione/verità a terra; altrimenti la UI mostra «dati insufficienti» anziché un numero inventato.
+
+### 5.2 Stato del Ciclo di Vita di Ingress NGINX e Uso del Dataset
+- **Ingress NGINX mantenuto con mitigazioni (Decisione D3):** Il progetto fissa per digest `ingress-nginx/controller:v1.15.1`, ultima release della community prima dell'archiviazione di `kubernetes/ingress-nginx` (24 marzo 2026). Poiché per le vulnerabilità successive non arriveranno fix (es. CVE-2026-116472), le annotazioni snippet sono disabilitate (`allow-snippet-annotations=false`, mitigazione di CVE-2021-25742) e l'immagine del controller è pinnata per digest. La **Gateway API** è documentata come percorso di migrazione futuro; il layer Ingress è isolato dall'applicazione per poterlo sostituire senza toccare la logica di business.
+- **Uso del dataset OhioT1DM (Decisione D1):** Il dataset clinico **non è ridistribuito** in questo repository pubblico. È utilizzato secondo l'accordo d'uso di OhioT1DM ed è montato in sola lettura nel Seed Job da un volume locale (`k8s/seed-demo-job.yaml`); né la storia Git né alcuna immagine container contengono i CSV.
 
 ---
 
@@ -299,40 +319,65 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 scc-project/
 ├── docs/
 │   ├── traccia.pdf                       # Traccia ufficiale del progetto d'esame
-│   └── Analisi architettura funzionale/  # Relazione e diagrammi requisiti funzionali SaaS
+│   ├── Analisi architettura funzionale/  # Relazione e diagrammi requisiti funzionali SaaS
+│   └── Architettura cloud/               # Relazione e diagrammi architettura cloud
+├── Diabetes/                # (solo locale, NON versionato) CSV OhioT1DM montati in sola lettura dal Seed Job (D1)
+├── .dockerignore            # Esclusione file non necessari dal contesto di build
 ├── .gitattributes           # Normalizzazione terminatori di riga (LF per Linux, CRLF per PowerShell)
 ├── .gitignore               # Esclusione cache, venv e file temporanei
-├── Makefile                 # Automazione per Linux/macOS (Single Source of Truth)
-├── requirements.txt         # Dipendenze minimali di runtime (FastAPI, ONNX Runtime)
+├── Makefile                 # Automazione unificata per Linux/macOS
+├── requirements.txt         # Dipendenze minimali runtime ML (FastAPI, ONNX Runtime)
+├── requirements.lock        # Lock con hash per l'immagine ML (pip-compile --generate-hashes)
+├── requirements-saas.txt    # Dipendenze backend SaaS (FastAPI, SQLAlchemy, psycopg, PyJWT, bcrypt)
+├── requirements-saas.lock   # Lock con hash per l'immagine SaaS/Worker/Seed
 ├── requirements-train.txt   # Dipendenze offline per l'addestramento (PyTorch, ONNX)
 ├── requirements-test.txt    # Dipendenze per la suite di test (pytest, httpx)
+├── common/
+│   └── __init__.py          # Costanti cliniche condivise (CLASS_BINS, classify_glucose)
 ├── app/
-│   ├── main.py              # API FastAPI con runtime ONNX fail-closed, early warning e probe rigorosi
-│   ├── config.py            # Configurazioni via variabili d'ambiente (Twelve-Factor App)
-│   └── schemas.py           # Validazione Pydantic v2 (range fisiologici, anti-NaN/Inf)
+│   ├── main.py              # Microservizio interno di inferenza ONNX fail-closed
+│   ├── config.py            # Configurazioni Twelve-Factor App
+│   └── schemas.py           # Validazione Pydantic v2 (serie glicemica + esogeni Hovorka)
+├── saas_app/
+│   ├── main.py              # Backend SaaS RBAC (cookie HttpOnly, fail-fast secret, CSP/HSTS)
+│   ├── auth.py              # IAM JWT + revoca JTI + rate limiter + audit atomico
+│   ├── clinical.py          # Validazione risposta ML, profilo bolo, mapping RF06/RF07 con target
+│   ├── repositories.py      # Accesso dati SQLAlchemy / idempotenza CGM
+│   ├── services/            # Layer di dominio (patient, doctor, manager, ingestion)
+│   ├── routers/             # Router HTTP sottili (auth, patient, doctor, manager, ingestion)
+│   └── seed_cli.py          # CLI dedicata per il Seed Job iniziale
+├── frontend/
+│   ├── index.html           # Pagina di Login (nessuna credenziale hardcoded)
+│   ├── patient.html         # Dashboard Paziente (dichiarazione pasti + storico week/month/year)
+│   ├── doctor.html          # Dashboard Diabetologo (pazienti assegnati, trend, diete, interventi)
+│   ├── manager.html         # Dashboard Center Manager (statistiche aggregate + stato pod SLA)
+│   └── nginx.conf           # Server statico non-root con CSP 'self' e 404 rigoroso
 ├── model/
-│   ├── train_lstm.py        # Script addestramento offline, metriche ed export ONNX
-│   ├── model_metadata.json  # Metadati, versione, architettura e SHA256 checksum
-│   └── model.onnx           # Artefatto modello esportato
+│   ├── train_lstm.py        # Script addestramento offline ed export ONNX
+│   ├── model_metadata.json  # Metadati, scaler e checksum SHA256
+│   ├── model.onnx           # Grafo ONNX
+│   └── model.onnx.data      # Pesi esterni ONNX
 ├── docker/
-│   ├── Dockerfile           # Multi-stage hardened (non-root UID 10001, superficie d'attacco CVE minimizzata)
-│   └── .dockerignore
+│   ├── Dockerfile           # Runtime ML non-root UID 10001 (base pinnata per digest)
+│   ├── Dockerfile.saas      # Immagine unica SaaS API + Worker + Seed Job (comandi diversi, P7)
+│   └── Dockerfile.frontend  # Frontend NGINX unprivileged UID 101 (base pinnata per digest)
 ├── k8s/
-│   ├── kind-config.yaml     # Topologia 1 Master + 2 Worker nodes KinD
-│   ├── deployment.yaml      # 3 repliche richieste, probe e strategia di aggiornamento graduale
-│   ├── pdb.yaml             # PodDisruptionBudget (minAvailable: 2) per interruzioni volontarie
-│   ├── service.yaml         # ClusterIP interno
-│   └── ingress.yaml         # Ingress NGINX con rate limiting (1000 rps), TLS e security headers
+│   ├── kind-config.yaml     # Topologia 1 Control-Plane + 2 Worker KinD
+│   ├── postgres-ha.yaml     # Cluster PostgreSQL HA (CloudNativePG: 1 Primary + 1 Standby)
+│   ├── redis.yaml           # Coda asincrona Redis 7.4 per ingestione CGM
+│   ├── ingestion-worker-deployment.yaml # 2 repliche Worker consumo coda CGM -> PostgreSQL HA
+│   ├── seed-job.yaml        # Job one-shot migrazioni Alembic + seed OhioT1DM
+│   ├── deployment.yaml      # 3 repliche ML (:1.0.0) con startup/liveness/readiness probe
+│   ├── saas-deployment.yaml # 2 repliche SaaS (:1.0.0) con fail-fast secret
+│   ├── frontend-deployment.yaml # 2 repliche Frontend (:1.0.0)
+│   ├── pdb.yaml / saas-pdb.yaml / frontend-pdb.yaml
+│   ├── service.yaml / ml-headless-service.yaml / saas-service.yaml / frontend-service.yaml
+│   ├── networkpolicy.yaml   # Firewall interno default-deny + allowlist esplicita per zona
+│   └── ingress.yaml         # NGINX Ingress HTTPS obbligatorio (/ e /api)
 ├── tests/
-│   └── test_api.py          # Test automatizzati con pytest su health, ready, predict e metrics
-└── scripts/
-    ├── simulate_cgm_patient.py # Simulatore continuo del sensore CGM e diario pasti da dataset
-    ├── setup_host.sh / .ps1 # Setup strumenti di sistema (Docker, wrk, KinD, kubectl)
-    ├── setup_host_macos.sh  # Setup macOS tramite Homebrew
-    ├── setup_env.sh / .ps1  # Gestore VENV: profili CPU, CUDA e ROCm secondo piattaforma
-    ├── deploy_k8s.sh / .ps1 # Deployment automatico idempotente (rollout restart)
-    ├── run_stress_test.sh / .ps1 # wrk: validazione e certificazione vincoli SLA (Linux/macOS/Windows)
-    └── test_predict.lua     # Script Lua che genera payload dimostrativi per wrk
+│   ├── test_api.py          # Test automatizzati API ML
+│   └── test_saas_api.py     # Test automatizzati IAM, cookie, revoca, RBAC, clinica e ingestion
+└── scripts/                 # Provisioning, deploy KinD, simulatore CGM e benchmark wrk interno
 ```
 
 ### 6.1 Gestione Ambienti Virtuali per Hardware Eterogeneo (CPU, NVIDIA CUDA, AMD ROCm)

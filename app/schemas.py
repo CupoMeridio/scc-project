@@ -13,6 +13,8 @@ import math # Modulo matematico standard per verificare valori non numerici (NaN
 from typing import List, Optional, Dict, Any # Annotazioni di tipo statico per type hinting
 from pydantic import BaseModel, Field, field_validator # Classi base e decoratori di validazione Pydantic v2
 
+from common import CLASS_BINS
+
 # -----------------------------------------------------------------------------
 # COSTANTI PER I LIMITI FISIOLOGICI UMANI (RANGE DI SICUREZZA CLINICA)
 # -----------------------------------------------------------------------------
@@ -22,13 +24,8 @@ from pydantic import BaseModel, Field, field_validator # Classi base e decorator
 # Conversione standard: 1 mmol/L = 18.018 mg/dL.
 GLUCOSE_MIN_MMOL = 1.0   # mmol/L (~18 mg/dL): limite inferiore estremo compatibile con la vita
 GLUCOSE_MAX_MMOL = 35.0  # mmol/L (~630 mg/dL): fondo scala dei moderni sensori medici CGM
-CARBS_MIN_G = 0.0        # grammi: non esistono pasti con carboidrati negativi
-CARBS_MAX_G = 300.0      # grammi: porzione pasto eccezionalmente abbondante
-INSULIN_MIN_U = 0.0      # Unità (IU): dosaggio minimo
-INSULIN_MAX_U = 100.0    # Unità (IU): limite massimo precauzionale per singolo evento
-
-# SOGLIE CLINICHE INTERNAZIONALI PER LE 7 CLASSI DI RISCHIO GLICEMICO (in mmol/L)
-CLASS_BINS = [0.0, 3.0, 3.9, 5.0, 7.8, 10.0, 13.9, float("inf")]
+CHO_RATE_MAX = 15.0      # Tasso di assorbimento carboidrati Hovorka (OhioT1DM max ~6.5)
+INSULIN_MAX_U = 100.0    # Livello / apporto insulinico massimo per singolo passo (OhioT1DM I(t+k))
 
 RISK_METADATA: Dict[int, Dict[str, str]] = {
     1: {"label": "Ipoglicemia Severa", "range": "[0.0, 3.0) mmol/L", "alert": "CRITICAL_HYPO"},
@@ -160,10 +157,10 @@ class PredictionRequest(BaseModel):
                 raise ValueError(f"Valore non numerico (NaN/Inf) nella variabile esogena #{idx}.")
             if val < 0.0:
                 raise ValueError(f"Valore negativo non ammesso per la variabile esogena #{idx}: {val}.")
-            # Controllo tetti massimi clinici: indici pari = Insulina (<=100 U), dispari = Carboidrati (<=300 g)
-            max_limit = INSULIN_MAX_U if idx % 2 == 0 else CARBS_MAX_G
+            # Controllo tetti massimi clinici: indici pari = Insulina I(t+k) (<=100), dispari = tasso assorbimento CHO Hovorka (<=15)
+            max_limit = INSULIN_MAX_U if idx % 2 == 0 else CHO_RATE_MAX
             if val > max_limit:
-                label = "Insulina" if idx % 2 == 0 else "Carboidrati"
+                label = "Insulina" if idx % 2 == 0 else "Tasso CHO"
                 raise ValueError(
                     f"Valore eccessivo per {label} al passo #{idx}: {val:.1f} (massimo consentito: {max_limit:.1f})."
                 )

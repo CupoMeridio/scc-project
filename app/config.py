@@ -48,6 +48,9 @@ class Settings:
     # Livello di severità dei log di sistema: "INFO", "WARNING", "ERROR", "DEBUG".
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
+    # Ambiente di esecuzione: "production" nasconde la documentazione OpenAPI.
+    ML_ENV: str = os.getenv("ML_ENV", "production").lower()
+
 
 # Istanza globale importabile da tutti i moduli del progetto (es. from app.config import settings)
 settings = Settings()

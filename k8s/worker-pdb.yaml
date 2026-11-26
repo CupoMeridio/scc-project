@@ -1,0 +1,15 @@
+# FILE: k8s/worker-pdb.yaml
+# RUOLO: garantisce almeno 1 Ingestion Worker attivo durante drain/upgrade del cluster.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: diabetes-ingestion-worker-pdb
+  namespace: default
+  labels:
+    app: diabetes-ingestion-worker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: diabetes-ingestion-worker

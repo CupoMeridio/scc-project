@@ -80,7 +80,9 @@ DISCARDED_SIGNALS = ["ST(t)", "EA(t)", "HR(t)"]
 # - Classe 5: [7.8, 10.0) -> Lievemente sopra il target (iperglicemia post-prandiale accettabile)
 # - Classe 6: [10.0, 13.9) -> Iperglicemia Elevata (necessità di monitoraggio)
 # - Classe 7: [13.9, +inf) -> Iperglicemia Grave (rischio chetoacidosi diabetica - DKA)
-BINS = [0.0, 3.0, 3.9, 5.0, 7.8, 10.0, 13.9, np.inf]
+from common import CLASS_BINS
+
+BINS = CLASS_BINS
 
 CLASS_DESCRIPTIONS = {
     1: {"name": "Ipoglicemia Severa", "range": "[0.0, 3.0) mmol/L", "alert": "CRITICAL_HYPO"},

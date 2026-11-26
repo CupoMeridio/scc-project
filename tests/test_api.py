@@ -312,7 +312,7 @@ def test_predict_exogenous_upper_bounds(client: TestClient):
     excessive_carbs = {
         "patient_id": "PATIENT_EXCESSIVE_CARBS",
         "glucose_history": [5.0] * 13,
-        "exogenous_inputs": [0.0, 450.0] + [0.0] * 12 # 450 g di carboidrati (> 300 g)
+        "exogenous_inputs": [0.0, 25.0] + [0.0] * 12 # Tasso assorbimento CHO > 15.0
     }
     assert client.post("/predict", json=excessive_carbs).status_code == 422
 

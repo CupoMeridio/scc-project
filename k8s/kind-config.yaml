@@ -2,6 +2,10 @@
 # RUOLO: File di configurazione per la creazione del cluster Kubernetes locale tramite KinD.
 
 # kind: Specifica il tipo di risorsa da creare. In questo caso è un 'Cluster' KinD.
+# NOTA CNI: kind usa kindnet come CNI predefinito. L'enforcement delle NetworkPolicy
+# dipende dalla versione di kind installata: scripts/verify_netpol.sh lo verifica e
+# registra la versione misurata. Se le policy non risultano applicate, impostare
+# disableDefaultCNI: true e installare Calico o Cilium.
 kind: Cluster
 
 # apiVersion: Versione delle API di KinD utilizzate per interpretare questo file YAML.
@@ -43,11 +47,24 @@ nodes:
         hostPort: 443
         protocol: TCP
 
+    # extraMounts: Monta la cartella locale del dataset dentro il container del nodo,
+    # così il Job di seed (hostPath /mnt/ohiot1dm) può leggerla senza che il dataset
+    # entri nell'immagine o nel git (Decisione D1). kind risolve l'hostPath relativo
+    # rispetto alla directory da cui si esegue `kind create cluster` (radice del repo).
+    extraMounts:
+      - hostPath: Diabetes/GlucoseClassification
+        containerPath: /mnt/ohiot1dm
+        readOnly: true
+
   # ----------------------------------------------------------------------------
   # NODO 2: PRIMO WORKER NODE
   # ----------------------------------------------------------------------------
   # role: worker -> Nodo lavoratore dedicato esclusivamente all'esecuzione dei pod applicativi.
   - role: worker
+    extraMounts:
+      - hostPath: Diabetes/GlucoseClassification
+        containerPath: /mnt/ohiot1dm
+        readOnly: true
 
   # ----------------------------------------------------------------------------
   # NODO 3: SECONDO WORKER NODE
@@ -55,3 +72,7 @@ nodes:
   # Avere 2 nodi worker separati rispetta il Requisito F della traccia ("one or more worker nodes")
   # e garantisce l'alta disponibilità: se un worker node esaurisce la RAM, l'altro continua a lavorare!
   - role: worker
+    extraMounts:
+      - hostPath: Diabetes/GlucoseClassification
+        containerPath: /mnt/ohiot1dm
+        readOnly: true

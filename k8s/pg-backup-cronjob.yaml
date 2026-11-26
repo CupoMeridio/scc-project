@@ -1,0 +1,101 @@
+# FILE: k8s/pg-backup-cronjob.yaml
+# RUOLO: Backup giornaliero del database clinico su PVC (object storage non disponibile in KinD).
+# In un datacenter reale questa responsabilità passa a un backup manager con
+# object store S3 e PITR; qui manteniamo dump compressi con ritenzione di 7 giorni.
+#
+# LIMITI DICHIARATI (P12, ambiente di laboratorio KinD):
+#  - I dump NON sono cifrati a riposo: sono protetti solo dai permessi del PVC e
+#    dal fatto che il volume non è esposto fuori dal cluster. In produzione servono
+#    cifratura lato client (es. `age`/GPG) e chiavi gestite da un KMS.
+#  - Nessun Point-In-Time Recovery: si può ripristinare solo all'istante dell'ultimo dump.
+#  - Il ripristino è manuale e va provato: vedi il comando di restore nell'intestazione
+#    dei comandi del container e l'evidenza richiesta (D8) in docs/audit_reports/.
+# Ripristino (procedura):
+#   kubectl cp <pod-pgbackup>:/backups/<file>.dump /tmp/restore.dump
+#   kubectl exec -i diabetes-pg-1 -- pg_restore --clean --if-exists \
+#     -U saas_migrator -d diabetes_saas --no-owner < /tmp/restore.dump
+# Da eseguire su un DB di prova prima di dichiararlo verificato.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-backups
+  namespace: default
+  labels:
+    app: diabetes-pg-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: diabetes-pg-backup
+  namespace: default
+  labels:
+    app: diabetes-pg-backup
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: diabetes-pg-backup
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: pgdump
+              image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  FILE="/backups/diabetes_saas_$(date -u +%Y%m%dT%H%M%SZ).dump"
+                  PGPASSWORD="$PG_PASSWORD" pg_dump \
+                    -h diabetes-pg-rw -p 5432 -U saas_migrator -d diabetes_saas \
+                    -Fc -f "$FILE"
+                  echo "[✓] Backup scritto: $FILE"
+                  find /backups -name '*.dump' -mtime +7 -delete
+              env:
+                - name: PG_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: saas-secrets
+                      key: POSTGRES_PASSWORD
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "192Mi"
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: pg-backups

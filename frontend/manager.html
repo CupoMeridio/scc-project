@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Center Manager — Telemetria e Statistiche Aggregate</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span>Diabete T1D SaaS</span>
+      <span class="role-pill">Center Manager</span>
+    </div>
+    <div class="topbar-user">
+      <span id="navUserName">...</span>
+      <button id="logoutBtn" class="btn btn-outline btn-sm">Esci</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="banner banner-green mt-0-mb-18px">
+      <strong>Privacy-Preserving View (RF16 / RNF09):</strong> Questa dashboard espone esclusivamente statistiche aggregate e metriche SLA di infrastruttura, senza alcun dato personale dei pazienti.
+    </div>
+
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Interventi Medici</div>
+        <div class="kpi-value" id="kpiTotalIv">--</div>
+        <div class="kpi-sub" id="kpiIvSplit">Modello: -- | Paziente: --</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Accuratezza Media (MAE)</div>
+        <div class="kpi-value" id="kpiMae">--</div>
+        <div class="kpi-sub" id="kpiCohort">Pazienti: -- | Medici: --</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Latenza Media ML</div>
+        <div class="kpi-value" id="kpiLatency">--</div>
+        <div class="kpi-sub">Obiettivo SLA: &lt;= 1000 ms</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Conformità SLA / Repliche</div>
+        <div class="kpi-value" id="kpiSla">--</div>
+        <div class="kpi-sub" id="kpiPods">Pod ML online: --</div>
+      </div>
+    </section>
+
+    <div class="two-col">
+      <section class="card">
+        <div class="section-header">
+          <h3 class="m-0">Interventi per Settimana (RF17)</h3>
+          <button id="refreshManagerBtn" class="btn btn-secondary btn-sm">Aggiorna</button>
+        </div>
+        <div class="chart-box">
+          <canvas id="weeklyChart"></canvas>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Distribuzione Aggregata Classi di Rischio (1–7)</h3>
+        <div class="chart-box">
+          <canvas id="riskChart"></canvas>
+        </div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h3>Stato Repliche Servizio di Predizione ONNX (Service Monitoring — RF18)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pod / Istanza</th>
+              <th>Stato</th>
+              <th>Uptime (s)</th>
+              <th>Predizioni</th>
+              <th>Latenza Media</th>
+              <th>Picco Max</th>
+              <th>SLA &lt;= 1s</th>
+              <th>Error Rate</th>
+            </tr>
+          </thead>
+          <tbody id="podsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/vendor/chart.umd.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/manager.js"></script>
+</body>
+</html>

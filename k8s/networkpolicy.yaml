@@ -1,0 +1,313 @@
+# FILE: k8s/networkpolicy.yaml
+# RUOLO: Isolamento perimetrale completo (default-deny + allowlist esplicita per ogni zona).
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: default
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - diabetes-saas-api
+          - diabetes-ingestion-worker
+          - diabetes-saas-seed
+          - diabetes-pg-backup
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: diabetes-frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ml-api-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: diabetes-forecasting-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: diabetes-saas-api
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: saas-api-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: diabetes-saas-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8001
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: diabetes-forecasting-api
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: diabetes-pg
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: diabetes-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: diabetes-redis
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: diabetes-saas-api
+        - podSelector:
+            matchLabels:
+              app: diabetes-ingestion-worker
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingestion-worker-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: diabetes-ingestion-worker
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: diabetes-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: diabetes-pg
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seed-job-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: diabetes-saas-seed
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: diabetes-pg
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-ha-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: diabetes-pg
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: diabetes-saas-api
+        - podSelector:
+            matchLabels:
+              app: diabetes-ingestion-worker
+        - podSelector:
+            matchLabels:
+              app: diabetes-saas-seed
+        - podSelector:
+            matchLabels:
+              app: diabetes-pg-backup
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: diabetes-pg
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        # AND tra namespace e pod: solo l'operator CNPG, non qualsiasi pod
+        # del namespace cnpg-system (due voci separate sarebbero in OR).
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg
+        # OR: gli altri pod dello stesso cluster PostgreSQL (instance manager).
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: diabetes-pg
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: diabetes-pg
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Instance manager CNPG -> kube-apiserver (leader election / status).
+    # I due valori sono COSTANTI per il cluster KinD di default usato da questo progetto:
+    #   10.96.0.1/32   = ClusterIP del Service "kubernetes" (service CIDR default 10.96.0.0/12).
+    #   172.18.0.0/16 = subnet della rete Docker "kind" creata da kind (api-server sulla 6443).
+    # Non sono assunti: scripts/verify_netpol.sh li rileva a runtime
+    # (kubectl get svc kubernetes, docker network inspect kind) e fallisce se non
+    # coincidono con questo manifest, così un cambio di CIDR non passa inosservato.
+    - to:
+        - ipBlock:
+            cidr: 10.96.0.1/32
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - ipBlock:
+            cidr: 172.18.0.0/16
+      ports:
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pg-backup-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: diabetes-pg-backup
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: diabetes-pg
+      ports:
+        - protocol: TCP
+          port: 5432

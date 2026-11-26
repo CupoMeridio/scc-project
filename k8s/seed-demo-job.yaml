@@ -1,0 +1,96 @@
+# FILE: k8s/seed-demo-job.yaml
+# RUOLO: Job one-shot OPT-IN per il caricamento dei dati demo OhioT1DM.
+# Le password non sono note: vengono generate da `make seed-demo` e passate
+# tramite il Secret demo-credentials. Non viene applicato dal deploy automatico.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: diabetes-saas-demo
+  namespace: default
+  labels:
+    # Stessa label del Job migrazioni: la NetworkPolicy seed-job-policy
+    # continua ad autorizzare l'accesso a PostgreSQL.
+    app: diabetes-saas-seed
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: diabetes-saas-seed
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed-demo
+          # Stessa immagine unica del piano dati (Dockerfile.saas): il Job cambia
+          # solo il comando di avvio (P7).
+          image: diabetes-saas-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-m", "saas_app.seed_cli"]
+          env:
+            - name: SAAS_ENV
+              value: "production"
+            - name: RUN_DEMO_SEED
+              value: "true"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: saas-secrets
+                  key: MIGRATOR_DATABASE_URL
+            - name: SAAS_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: saas-secrets
+                  key: SAAS_APP_PASSWORD
+            - name: DEMO_PATIENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-credentials
+                  key: DEMO_PATIENT_PASSWORD
+            - name: DEMO_DOCTOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-credentials
+                  key: DEMO_DOCTOR_PASSWORD
+            - name: DEMO_MANAGER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-credentials
+                  key: DEMO_MANAGER_PASSWORD
+            # Decisione D1: il dataset non è nell'immagine, arriva dal volume montato.
+            - name: DATASET_DIR
+              value: "/mnt/ohiot1dm"
+          volumeMounts:
+            - name: ohiot1dm-dataset
+              mountPath: /mnt/ohiot1dm
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "384Mi"
+      # Il path /mnt/ohiot1dm è quello montato da kind sulla cartella locale del
+      # dataset (extraMounts in k8s/kind-config.yaml). fsGroup non è applicato ai
+      # volumi hostPath: i CSV devono essere leggibili dall'utente 10001 (permessi 0644).
+      volumes:
+        - name: ohiot1dm-dataset
+          hostPath:
+            path: /mnt/ohiot1dm
+            type: Directory

@@ -1,0 +1,41 @@
+# FILE: k8s/postgres-ha.yaml
+# RUOLO: Data Zone HA — Cluster PostgreSQL 16 replicato (1 Primary + 1 Standby con failover automatico) via CloudNativePG.
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: diabetes-pg
+  namespace: default
+  labels:
+    zone: data
+spec:
+  instances: 2
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+  primaryUpdateStrategy: unsupervised
+  stopDelay: 15
+  switchoverDelay: 15
+  # Replica sincronica: il primary attende ilack della standby prima di
+  # confermare la commit, evitando la perdita di transazioni cliniche in failover.
+  minSyncReplicas: 1
+  maxSyncReplicas: 1
+  bootstrap:
+    initdb:
+      database: diabetes_saas
+      owner: saas_migrator
+      secret:
+        name: saas-pg-auth
+      # saas_migrator non è superuser, ma gli serve CREATEROLE per creare/ruotare saas_app in 001_initial_schema.
+      postInitSQL:
+        - ALTER ROLE saas_migrator WITH CREATEROLE;
+  storage:
+    size: 1Gi
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"

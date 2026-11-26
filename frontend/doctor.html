@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Diabetologo — Pazienti in Cura</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span>Diabete T1D SaaS</span>
+      <span class="role-pill">Diabetologo</span>
+    </div>
+    <div class="topbar-user">
+      <span id="navUserName">...</span>
+      <button id="logoutBtn" class="btn btn-outline btn-sm">Esci</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="split-grid">
+      <aside>
+        <div class="card">
+          <div class="section-header">
+            <h3 class="m-0">I miei pazienti</h3>
+            <button id="toggleRegisterBtn" class="btn btn-primary btn-sm">+ Nuovo</button>
+          </div>
+          <p class="muted">Seleziona un paziente assegnato per ispezionare andamenti e interventi (RF09).</p>
+          <div id="patientsList"></div>
+        </div>
+
+        <div id="registerCard" class="card hidden">
+          <h3>Registra Nuovo Paziente (UC07)</h3>
+          <form id="registerPatientForm">
+            <div class="form-row">
+              <label for="regFullName">Nome e Cognome</label>
+              <input id="regFullName" required placeholder="es. Giulio Neri" />
+            </div>
+            <div class="form-row">
+              <label for="regUsername">Username</label>
+              <input id="regUsername" required placeholder="es. patient_601" />
+            </div>
+            <div class="form-row">
+              <label for="regEmail">Email</label>
+              <input id="regEmail" type="email" required placeholder="giulio@diabetes-saas.local" />
+            </div>
+            <div class="form-row">
+              <label for="regCode">Codice Paziente</label>
+              <input id="regCode" required placeholder="es. 601" />
+            </div>
+            <div class="form-row">
+              <label for="regDiet">Limite Carboidrati Dieta (g)</label>
+              <input id="regDiet" type="number" min="10" max="300" value="60" required />
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Registra Paziente</button>
+            <p class="muted mt-8px">La password iniziale è generata dal server e mostrata una sola volta al termine della registrazione (Q5).</p>
+          </form>
+          <div id="registerMsg" class="banner hidden"></div>
+        </div>
+      </aside>
+
+      <section id="detailPanel">
+        <div class="card">
+          <div class="section-header">
+            <div>
+              <h2 id="detailName" class="mb-2px">Seleziona un paziente</h2>
+              <div class="muted" id="detailMeta">--</div>
+            </div>
+            <div class="btn-group" id="docRangeButtons">
+              <button type="button" class="btn btn-secondary btn-sm active" data-range="week">Settimana</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-range="month">Mese</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-range="year">Anno</button>
+            </div>
+          </div>
+
+          <div id="trendAlert" class="banner banner-orange hidden"></div>
+
+          <div class="chart-box mt-14px">
+            <canvas id="doctorChart"></canvas>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <h3>Aggiorna Dieta Prescritta (RF14)</h3>
+            <form id="dietForm">
+              <div class="form-row">
+                <label for="dietCarbLimit">Limite Carboidrati per Pasto (g)</label>
+                <input id="dietCarbLimit" type="number" min="10" max="300" step="1" required />
+              </div>
+              <div class="two-col">
+                <div class="form-row">
+                  <label for="dietMinMmol">Target Min (mmol/L)</label>
+                  <input id="dietMinMmol" type="number" min="2.5" max="6" step="0.1" required />
+                </div>
+                <div class="form-row">
+                  <label for="dietMaxMmol">Target Max (mmol/L)</label>
+                  <input id="dietMaxMmol" type="number" min="6" max="18" step="0.1" required />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">Salva Dieta</button>
+            </form>
+            <div id="dietMsg" class="banner hidden"></div>
+          </div>
+
+          <div class="card">
+            <h3>Registra Intervento Clinico (UC06 / RF15)</h3>
+            <form id="interventionForm">
+              <div class="two-col">
+                <div class="form-row">
+                  <label for="ivType">Tipo Intervento</label>
+                  <select id="ivType">
+                    <option value="reminder">Promemoria / Contatto</option>
+                    <option value="diet_change">Cambio Dieta</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label for="ivCause">Causa Rilevata</label>
+                  <select id="ivCause">
+                    <option value="patient_behavior">Comportamento Paziente</option>
+                    <option value="model_error">Errore del Modello</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row hidden" id="ivNewDietWrap">
+                <label for="ivNewDiet">Nuovo Limite Carboidrati (g)</label>
+                <input id="ivNewDiet" type="number" min="10" max="300" step="1" />
+              </div>
+              <div class="form-row">
+                <label for="ivNotes">Note cliniche</label>
+                <textarea id="ivNotes" rows="2" required placeholder="Descrivi l'intervento effettuato..."></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary">Registra Intervento</button>
+            </form>
+            <div id="ivMsg" class="banner hidden"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Storico Interventi &amp; Pasti Recenti</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Tipo</th>
+                  <th>Causa</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody id="interventionsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/vendor/chart.umd.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/doctor.js"></script>
+</body>
+</html>

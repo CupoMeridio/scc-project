@@ -7,8 +7,9 @@
 # ------------------------------------------------------------------------------
 # 1. FILE COMPOSTI & ARCHIVI COMPRESSI (Prevenzione duplicazione binaria)
 # ------------------------------------------------------------------------------
-# Il dataset OhioT1DM e gia estratto e versionato in chiaro in Diabetes/GlucoseClassification/
-# I file zip o tar compressi non devono essere duplicati nel repository (risparmio ~10MB).
+# Il dataset OhioT1DM NON e versionato (Decisione D1: accordo d'uso, niente ridistribuzione
+# nel repository pubblico). Vedi la sezione 6: Diabetes/GlucoseClassification/ e ignorato.
+# I file zip o tar compressi non devono comunque essere duplicati nel repository.
 *.zip
 *.tar
 *.tar.gz
@@ -83,8 +84,11 @@ htmlcov/
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*
 
+# Decisione D1: il dataset OhioT1DM non viene ridistribuito nel repository pubblico.
+# I 24 CSV e le sottocartelle per paziente escono dal git e vengono montati come volume.
+Diabetes/GlucoseClassification/
+Diabetes/*.csv
 # Output esplorativi del dataset: NON servono né al training né al serving.
-# I 24 CSV <patient>-ws-{training,testing}(t+30).csv restano versionati.
 Diabetes/**/*.png
 Diabetes/**/*_classes.txt
 Diabetes/ohio_analysis/
@@ -104,6 +108,12 @@ _tmp*
 *.swo
 *~
 *.pid
+
+# Database SQLite generati in locale dai test e dall'avvio senza DATABASE_URL
+*.db
+*.sqlite
+*.sqlite3
+saas_local.db
 
 # ------------------------------------------------------------------------------
 # 8. CONFIGURAZIONI IDE & EDITORI
@@ -140,5 +150,4 @@ Thumbs.db
 # ------------------------------------------------------------------------------
 docs/mappa_corrispondenza_architettura.md
 docs/feature_spec.md
-docs/audit_reports/
 Diabetes/dataset_description.md

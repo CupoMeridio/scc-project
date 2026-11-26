@@ -1,0 +1,19 @@
+# FILE: k8s/frontend-service.yaml
+# RUOLO: ClusterIP interno per la Web UI statica.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-frontend-service
+  namespace: default
+  labels:
+    app: diabetes-frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: diabetes-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accesso — Sistema Monitoraggio Diabete T1D</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="login-shell">
+    <div class="card login-card">
+      <h2>Diabete T1D — Portale Clinico SaaS</h2>
+      <p class="muted">Accedi con le tue credenziali personali. Il controllo degli accessi e dei ruoli avviene lato server tramite sessione sicura.</p>
+
+      <form id="loginForm">
+        <div class="form-row">
+          <label for="username">Nome utente</label>
+          <input id="username" name="username" type="text" autocomplete="username" required placeholder="Inserisci username" />
+        </div>
+        <div class="form-row">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Inserisci password" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Accedi</button>
+      </form>
+
+      <div id="loginError" class="banner banner-red hidden"></div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/login.js"></script>
+</body>
+</html>
