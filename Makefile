@@ -293,8 +293,10 @@ cluster-start:
 	    sleep 2; \
 	  done; \
 	  kubectl wait --for=condition=Ready nodes --all --timeout=120s; \
+	  kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s; \
 	  kubectl wait --for=condition=Ready cluster/diabetes-pg --timeout=180s; \
-	  echo "[✓] Cluster '\''$(CLUSTER_NAME)'\'' avviato manualmente."'
+	  kubectl wait --for=condition=Available deployment/diabetes-redis deployment/diabetes-model-repo deployment/diabetes-forecasting-api deployment/diabetes-iam-api deployment/diabetes-clinical-api deployment/diabetes-manager-api deployment/diabetes-ingest-api deployment/diabetes-ingestion-worker deployment/diabetes-frontend --timeout=180s; \
+	  echo "[✓] Cluster '\''$(CLUSTER_NAME)'\'' avviato e pronto (tutti i servizi Ready)."'
 
 # Ferma i container nodo KinD senza eliminare dati, PVC o segreti (disabilita restart automatico al boot).
 cluster-stop:
