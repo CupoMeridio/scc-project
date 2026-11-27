@@ -97,24 +97,25 @@ spec:
 
       # containers: Lista dei container che compongono il pod (1 solo container per pod)
       containers:
-        - name: api # Nome del container all'interno del pod
-          # image: Nome e tag dell'immagine Docker da eseguire.
-          # NOTA SUL VERSIONING IMMAGINI (KinD vs Produzione):
-          # In ambiente KinD locale, 'diabetes-api:latest' combinato con 'imagePullPolicy: IfNotPresent'
-          # e 'kubectl rollout restart' consente di caricare le compilazioni locali direttamente
-          # nei nodi senza necessitare di un registry remoto esterno. In un deployment di produzione
-          # multi-tenant si utilizzano tag semantici immutabili (es. :1.0.0 o SHA del commit).
+        - name: api
           image: diabetes-api:1.0.0
-          # imagePullPolicy: IfNotPresent -> Usa il tag semantico pinnato 1.0.0 caricato nei nodi KinD.
           imagePullPolicy: IfNotPresent
-          
-          # ports: Documenta le porte di rete esposte dal container
+          command:
+            - uvicorn
+            - app.main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --workers
+            - "1"
+            - --ssl-certfile
+            - /etc/internal-tls/tls.crt
+            - --ssl-keyfile
+            - /etc/internal-tls/tls.key
           ports:
-            # containerPort: 8000 -> La porta su cui Uvicorn è in ascolto
             - containerPort: 8000
-              name: http
-              
-          # env: Variabili d'ambiente iniettate all'interno del container all'avvio
+              name: https
           env:
             - name: PORT
               value: "8000"
@@ -122,94 +123,71 @@ spec:
               value: "0.0.0.0"
             - name: LOG_LEVEL
               value: "INFO"
-
-          # --------------------------------------------------------------------
-          # 3. CONTAINER SECURITY CONTEXT (Principio del Minimo Privilegio)
-          # --------------------------------------------------------------------
+            - name: MODEL_REPO_URL
+              value: "https://diabetes-model-repo"
+            - name: MODEL_CACHE_DIR
+              value: "/tmp/active_model"
+            - name: MODEL_CA_CERT_PATH
+              value: "/etc/internal-ca/ca.crt"
+            - name: MODEL_SIGNING_PUBLIC_KEY_PEM
+              valueFrom:
+                configMapKeyRef:
+                  name: model-signing-public
+                  key: MODEL_SIGNING_PUBLIC_KEY_PEM
           securityContext:
-            # allowPrivilegeEscalation: false -> Impedisce al processo figlio di ottenere privilegi superiori
-            # a quelli del processo genitore (ad esempio sfruttando binari con bit SUID come sudo o passwd).
             allowPrivilegeEscalation: false
-            # readOnlyRootFilesystem: true -> Rende l'INTERO filesystem del container immutabile in sola lettura!
-            # Nessun malware o exploit puo scrivere file binari o sovrascrivere file di sistema.
             readOnlyRootFilesystem: true
-            # capabilities: Linux divide i privilegi di root in circa 40 "capacità" distinte (es. CAP_NET_ADMIN, CAP_SYS_ADMIN).
-            # drop: ["ALL"] -> Rimuove TUTTE le capacità speciali del kernel: il container può solo eseguire calcoli ordinari!
             capabilities:
               drop:
                 - ALL
-
-          # volumeMounts: Monta cartelle scrivibili temporanee per processi che richiedono cache temporanea (/tmp)
           volumeMounts:
             - name: tmp-volume
               mountPath: /tmp
-
-          # --------------------------------------------------------------------
-          # 4. LIMITI DI RISORSE (Prevenzione DoS e Noisy-Neighbor)
-          # --------------------------------------------------------------------
+            - name: internal-tls
+              mountPath: /etc/internal-tls
+              readOnly: true
+            - name: internal-ca
+              mountPath: /etc/internal-ca
+              readOnly: true
           resources:
-            # requests: Risorse minime GARANTITE da Kubernetes per schedulare il pod su un nodo
             requests:
-              # cpu: "100m" -> 100 millicores = 0.1 core di CPU (10% di un core)
               cpu: "100m"
-              # memory: "128Mi" -> 128 Mebibyte di RAM
               memory: "128Mi"
-            # limits: Tetto massimo ASSOLUTO. Se il pod prova a usare più di queste risorse,
-            # viene limitato (throttling su CPU) o terminato per Out-Of-Memory (OOMKilled su RAM).
             limits:
-              # cpu: "500m" -> 0.5 core di CPU (massimo mezzo core per pod)
               cpu: "500m"
-              # memory: "256Mi" -> Massimo 256 MB di RAM. Impedisce attacchi mirati a saturare la RAM dell'host!
               memory: "256Mi"
-
           startupProbe:
             httpGet:
               path: /ready
               port: 8000
+              scheme: HTTPS
             initialDelaySeconds: 2
             periodSeconds: 5
-            failureThreshold: 12
-
-          # --------------------------------------------------------------------
-          # 5. LIVENESS PROBE (Sonda di Vita)
-          # --------------------------------------------------------------------
-          # Verifica se il processo Python è ancora vivo e reattivo.
+            failureThreshold: 24
           livenessProbe:
             httpGet:
-              path: /health # Percorso HTTP da interrogare
-              port: 8000    # Porta su cui inviare la richiesta
-            # initialDelaySeconds: 5 -> Attende 5 secondi dopo l'avvio del container prima del primo controllo
+              path: /health
+              port: 8000
+              scheme: HTTPS
             initialDelaySeconds: 5
-            # periodSeconds: 10 -> Ripete il controllo ogni 10 secondi
             periodSeconds: 10
-            # timeoutSeconds: 2 -> Se l'app non risponde entro 2 secondi, il controllo è fallito
             timeoutSeconds: 2
-            # failureThreshold: 3 -> Se fallisce per 3 volte consecutive, Kubernetes UCCIDE e RIAVVIA il pod!
             failureThreshold: 3
-
-          # --------------------------------------------------------------------
-          # 6. READINESS PROBE (Sonda di Prontezza)
-          # --------------------------------------------------------------------
-          # Verifica se il pod è PRONTO ad accettare il traffico dei pazienti.
           readinessProbe:
             httpGet:
-              path: /ready # Percorso HTTP da interrogare
+              path: /ready
               port: 8000
-            # initialDelaySeconds: 3 -> Attende 3 secondi dall'avvio
+              scheme: HTTPS
             initialDelaySeconds: 3
-            # periodSeconds: 5 -> Intervallo di polling ogni 5 secondi
             periodSeconds: 5
-            # timeoutSeconds: 1 -> Timeout stretto di 1 secondo
             timeoutSeconds: 1
-            # failureThreshold: 2 -> Se fallisce 2 volte consecutive (es. risponde 503),
-            # Kubernetes RIMUOVE il pod dal bilanciatore di carico: il traffico va solo ai pod sani!
             failureThreshold: 2
-
-      # ------------------------------------------------------------------------
-      # 7. VOLUMI DI SISTEMA (RAM/DISCO TEMPORANEO ISOLATO)
-      # ------------------------------------------------------------------------
       volumes:
-        # emptyDir: Crea una directory temporanea vuota montata in /tmp
-        # Permette al container di scrivere file temporanei pur mantenendo il filesystem radice read-only
         - name: tmp-volume
           emptyDir: {}
+        - name: internal-tls
+          secret:
+            secretName: ml-internal-tls
+        - name: internal-ca
+          configMap:
+            name: internal-ca

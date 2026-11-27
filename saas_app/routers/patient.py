@@ -8,9 +8,8 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from saas_app.auth import require_roles
+from saas_app.auth import Principal, require_roles
 from saas_app.db import get_db
-from saas_app.models import User
 from saas_app.schemas import (
     MealDeclareRequest,
     MealDeclareResponse,
@@ -25,7 +24,7 @@ router = APIRouter(prefix="/api/patient", tags=["Patient Service"])
 @router.get("/summary", response_model=PatientSummaryResponse)
 def get_patient_summary(
     request: Request,
-    current_user: User = Depends(require_roles("patient")),
+    current_user: Principal = Depends(require_roles("patient")),
     db: Session = Depends(get_db),
 ) -> PatientSummaryResponse:
     return patient_service.get_summary(db, current_user, request)
@@ -35,7 +34,7 @@ def get_patient_summary(
 def get_patient_history(
     request: Request,
     range: Literal["week", "month", "year"] = Query(default="week"),
-    current_user: User = Depends(require_roles("patient")),
+    current_user: Principal = Depends(require_roles("patient")),
     db: Session = Depends(get_db),
 ) -> PatientHistoryResponse:
     return patient_service.get_history(db, current_user, range, request)
@@ -45,7 +44,7 @@ def get_patient_history(
 def declare_meal(
     payload: MealDeclareRequest,
     request: Request,
-    current_user: User = Depends(require_roles("patient")),
+    current_user: Principal = Depends(require_roles("patient")),
     db: Session = Depends(get_db),
 ) -> MealDeclareResponse:
     return patient_service.declare_meal(db, current_user, payload, request)

@@ -6,8 +6,8 @@
     Consente di configurare e alternare istantaneamente 4 profili hardware diversi
     su macchine Windows con Docker Desktop o GPU dedicate:
       1) cpu-minimal : Solo runtime FastAPI, ONNX Runtime e test (zero PyTorch, ~100MB)
-      2) cpu-train   : Standard di progetto (PyTorch CPU ~350MB, allena in 2s) [CONSIGLIATO]
-      3) gpu-cuda    : PyTorch completo con supporto NVIDIA CUDA (~2.5GB)
+      2) cpu-train   : Standard di progetto (PyTorch CPU, download variabile) [CONSIGLIATO]
+      3) gpu-cuda    : PyTorch con supporto NVIDIA CUDA 13.0 (download grande)
       4) gpu-rocm    : rilevamento AMD; al momento installa PyTorch CPU su Windows
       5) auto        : Rilevamento automatico hardware GPU
 #>
@@ -24,6 +24,10 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $VenvsDir = Join-Path $ProjectRoot ".venvs"
 $VenvLink = Join-Path $ProjectRoot "venv"
+$PythonVersion = & py -3.14 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+if ($LASTEXITCODE -ne 0 -or $PythonVersion -ne "3.14") {
+    throw "Python 3.14 is required. Install it with venv support and retry."
+}
 
 # Ogni profilo ha un ambiente separato; il percorso stabile "venv" viene
 # reindirizzato al profilo selezionato al termine dello script.
@@ -56,8 +60,8 @@ if ([string]::IsNullOrWhiteSpace($Profile)) {
     Write-Host "=====================================================================" -ForegroundColor Cyan
     Write-Host "Selezione profilo per l'ambiente:"
     Write-Host "  1) cpu-minimal : Solo runtime API e test (FastAPI + ONNX Runtime, ~100MB)"
-    Write-Host "  2) cpu-train   : Standard progetto (PyTorch CPU ~350MB, allena in 2s) [CONSIGLIATO]"
-    Write-Host "  3) gpu-cuda    : PyTorch completo con supporto NVIDIA CUDA (~2.5GB)"
+    Write-Host "  2) cpu-train   : Standard progetto (PyTorch CPU, download variabile) [CONSIGLIATO]"
+    Write-Host "  3) gpu-cuda    : PyTorch con supporto NVIDIA CUDA 13.0 (download grande)"
     Write-Host "  4) gpu-rocm    : AMD rilevata; PyTorch CPU (ROCm non abilitato su Windows)"
     Write-Host "  5) auto        : Rilevamento automatico hardware GPU"
     Write-Host "=====================================================================" -ForegroundColor Cyan
@@ -84,42 +88,54 @@ $TargetPip = Join-Path $TargetVenv "Scripts\pip.exe"
 Write-Host "`n[*] Profilo selezionato: [ $SelectedProfile ]" -ForegroundColor Green
 Write-Host "[*] Cartella ambiente  : $TargetVenv" -ForegroundColor Gray
 
+if (Test-Path $TargetVenv) {
+    $ExistingVersion = "unknown"
+    if (Test-Path $TargetPython) {
+        $ExistingVersion = & $TargetPython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+    }
+    if ($ExistingVersion -ne "3.14") {
+        Write-Host "[*] Ricreo il profilo '$SelectedProfile' (Python $ExistingVersion, richiesto 3.14)..." -ForegroundColor Yellow
+        Remove-Item -Recurse -Force $TargetVenv
+    }
+}
+
 if (-not (Test-Path $TargetPython)) {
     # Crea e popola l'ambiente solo se non esiste già. Gli ambienti presenti
     # vengono riutilizzati senza aggiornare automaticamente i pacchetti.
     Write-Host "[+] Creazione nuovo virtual environment in $TargetVenv..." -ForegroundColor Cyan
-    python -m venv $TargetVenv
+    & py -3.14 -m venv $TargetVenv
 
     Write-Host "[+] Aggiornamento pip..." -ForegroundColor Cyan
     & $TargetPip install --upgrade pip setuptools wheel
 
     Write-Host "[+] Installazione dipendenze base..." -ForegroundColor Cyan
-    & $TargetPip install -r (Join-Path $ProjectRoot "requirements.txt") -r (Join-Path $ProjectRoot "requirements-test.txt")
+    & $TargetPip install --require-hashes `
+        -r (Join-Path $ProjectRoot "requirements.lock") `
+        -r (Join-Path $ProjectRoot "requirements-saas.lock") `
+        -r (Join-Path $ProjectRoot "requirements-test.lock")
 
     switch ($SelectedProfile) {
         "cpu-minimal" {
-            # Il fallback ONNX minimale richiede il pacchetto onnx per costruire
-            # e salvare il grafo quando PyTorch non è installato.
-            & $TargetPip install onnx
+            Write-Host "[+] Profilo 'cpu-minimal': runtime API e test senza PyTorch." -ForegroundColor Cyan
         }
         "cpu-train" {
             Write-Host "[+] Installazione PyTorch CPU..." -ForegroundColor Cyan
-            & $TargetPip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-            & $TargetPip install -r (Join-Path $ProjectRoot "requirements-train.txt")
+            & $TargetPip install "torch==2.15.0" --index-url https://download.pytorch.org/whl/cpu
+            & $TargetPip install --require-hashes -r (Join-Path $ProjectRoot "requirements-train.lock")
         }
         "gpu-cuda" {
-            # Usa le wheel PyTorch compilate per CUDA 12.4, invece delle wheel
+            # Usa le wheel PyTorch compilate per CUDA 13.0, invece delle wheel
             # CPU, per poter usare una GPU NVIDIA compatibile.
-            Write-Host "[+] Installazione PyTorch CUDA 12.4..." -ForegroundColor Cyan
-            & $TargetPip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-            & $TargetPip install -r (Join-Path $ProjectRoot "requirements-train.txt")
+            Write-Host "[+] Installazione PyTorch CUDA 13.0..." -ForegroundColor Cyan
+            & $TargetPip install "torch==2.14.1" --index-url https://download.pytorch.org/whl/cu130
+            & $TargetPip install --require-hashes -r (Join-Path $ProjectRoot "requirements-train.lock")
         }
         "gpu-rocm" {
             # Questo profilo installa attualmente PyTorch CPU: il nome identifica
             # l'hardware AMD, ma non abilita accelerazione ROCm su Windows.
             Write-Host "[+] Installazione dipendenze AMD/CPU..." -ForegroundColor Cyan
-            & $TargetPip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-            & $TargetPip install -r (Join-Path $ProjectRoot "requirements-train.txt")
+            & $TargetPip install "torch==2.15.0" --index-url https://download.pytorch.org/whl/cpu
+            & $TargetPip install --require-hashes -r (Join-Path $ProjectRoot "requirements-train.lock")
         }
     }
 } else {

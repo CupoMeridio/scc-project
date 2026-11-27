@@ -5,14 +5,14 @@
 # STADIO 1: BUILDER (Ambiente di compilazione e scaricamento dipendenze)
 # ------------------------------------------------------------------------------
 # FROM: Definisce l'immagine di partenza fissata per digest (pinning immutabile per riproducibilità).
-# - python:3.11.11-slim: Versione ufficiale minimale basata su Debian 12 (bookworm) slim.
-#   Rispetto all'immagine standard 'python:3.11' (che pesa ~1 GB), 'slim' pesa solo ~130 MB
+# - python:3.14.10-slim: Versione ufficiale minimale basata su Debian 13 (trixie) slim.
+#   Rispetto all'immagine standard 'python:3.14', 'slim' pesa molto meno
 #   e non contiene compilatori C, documentazione o utility inutilizzate, abbattendo le CVE rilevate da Docker Scout.
 #   Il digest è quello dell'indice multi-arch (output di `docker buildx imagetools inspect`,
 #   archiviato in docs/audit_reports/base_images_digests.txt): il tag da solo può essere ri-puntato.
 # - AS builder: Assegna un nome simbolico a questo stadio intermedio. I file generati qui
 #   potranno essere copiati nel secondo stadio; tutto il resto verrà automaticamente eliminato!
-FROM python:3.11.11-slim@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS builder
+FROM python:3.14.10-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b AS builder
 
 # WORKDIR /build: Imposta la cartella di lavoro corrente all'interno del container.
 # Se la cartella /build non esiste, Docker la crea automaticamente.
@@ -27,7 +27,7 @@ COPY requirements.lock .
 #   risparmiando spazio su disco.
 # - --require-hashes: Installa un pacchetto solo se il suo sha256 coincide con quello fissato
 #   nel lock, a difesa dal supply-chain tampering. Nessun `pip install --upgrade pip`.
-# - --user: Installa le librerie nella cartella dell'utente (/root/.local/lib/python3.11/site-packages)
+# - --user: Installa le librerie nella cartella dell'utente (/root/.local/lib/python3.14/site-packages)
 #   invece che nella directory globale di sistema (/usr/local). Questo renderà facilissimo copiarle nello stadio successivo!
 # - -r requirements.lock: Legge l'elenco dei pacchetti pinnati dal file.
 RUN pip install --no-cache-dir --require-hashes --user -r requirements.lock
@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir --require-hashes --user -r requirements.lock
 # STADIO 2: RUNNER (Ambiente di produzione finale: minimale, sicuro e non-root)
 # ------------------------------------------------------------------------------
 # Inizializzazione da un'immagine pulita, fissata per lo stesso digest dello stadio di build.
-FROM python:3.11.11-slim@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS runner
+FROM python:3.14.10-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b AS runner
 
 # ENV: Imposta variabili d'ambiente permanenti valide per tutti i processi del container.
 # - PYTHONDONTWRITEBYTECODE=1: Impedisce all'interprete Python di generare file compilati .pyc sul disco.

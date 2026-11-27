@@ -1,5 +1,5 @@
 # FILE: k8s/ingestion-worker-deployment.yaml
-# RUOLO: Worker asincroni dedicati che svuotano la coda Redis CGM verso PostgreSQL HA (2 repliche).
+# RUOLO: Worker asincroni dedicati che svuotano la coda Redis TLS CGM verso PostgreSQL HA (2 repliche).
 
 apiVersion: apps/v1
 kind: Deployment
@@ -46,17 +46,17 @@ spec:
           env:
             - name: SAAS_ENV
               value: "production"
+            - name: REDIS_CA_CERT_PATH
+              value: "/etc/internal-ca/ca.crt"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: saas-secrets
+                  name: worker-secrets
                   key: DATABASE_URL
-            # Il worker non firma né verifica token: JWT_SECRET_KEY non è montata
-            # (minimo privilegio, P12).
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: saas-secrets
+                  name: worker-secrets
                   key: REDIS_URL
           securityContext:
             allowPrivilegeEscalation: false
@@ -67,6 +67,12 @@ spec:
           volumeMounts:
             - name: tmp-volume
               mountPath: /tmp
+            - name: internal-ca
+              mountPath: /etc/internal-ca
+              readOnly: true
+            - name: pg-ca
+              mountPath: /etc/pg-ca
+              readOnly: true
           resources:
             requests:
               cpu: "50m"
@@ -74,8 +80,6 @@ spec:
             limits:
               cpu: "300m"
               memory: "192Mi"
-          # Il worker non espone HTTP: le probe leggono l'heartbeat scritto a ogni
-          # iterazione del loop, così un processo vivo ma bloccato viene riavviato.
           readinessProbe:
             exec:
               command: ["sh", "-c", "test -f /tmp/cgm-worker-alive && find /tmp/cgm-worker-alive -mmin -2 | grep -q ."]
@@ -91,3 +95,12 @@ spec:
       volumes:
         - name: tmp-volume
           emptyDir: {}
+        - name: internal-ca
+          configMap:
+            name: internal-ca
+        - name: pg-ca
+          secret:
+            secretName: diabetes-pg-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

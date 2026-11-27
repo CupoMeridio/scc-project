@@ -46,7 +46,7 @@ async function requireAuth(expectedRole) {
   }
   if (redirectIfPasswordChangeRequired(user)) return null;
   const userEl = document.getElementById("navUserName");
-  if (userEl) userEl.textContent = user.full_name;
+  if (userEl) userEl.textContent = user.full_name || user.username;
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
   return user;

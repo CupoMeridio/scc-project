@@ -1,0 +1,1313 @@
+=== Docker Scout CVE Report (D8) ===
+Date (UTC): 2026-11-27T20:36:31+00:00
+Images: diabetes-api:1.0.0 diabetes-saas-api:1.0.0 diabetes-frontend:1.0.0 diabetes-trainer:1.0.0
+
+--- docker image inspect diabetes-api:1.0.0 (ID / Created) ---
+sha256:8f86db6320988506020cb5ed4ee020f44c34ad95eb846e22bd69fbbd5329009b 2026-11-27T20:08:51.324409922+01:00
+--- docker scout quickview diabetes-api:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 170 packages
+    ✓ Provenance obtained from attestation
+    ...Evaluating policies
+    ✓ Policy evaluation completed
+
+ Target             │  diabetes-api:1.0.0   │    0C     6H     3M    27L     2?  
+   digest           │  8f86db632098         │                                    
+ Base image         │  python:3.14.10-slim  │    0C     6H     3M    27L     2?  
+ Updated base image │  python:3.15.2-slim   │    0C     6H     3M    27L     2?  
+                    │                       │                                    
+
+Policy status  FAILED  (4/7 policies met)
+Health score  C  (56%)
+
+ Status │                     Policy                     │           Results           
+────────┼────────────────────────────────────────────────┼─────────────────────────────
+ ✓      │ Default non-root user                          │                             
+ !      │ Copyleft licensed packages found               │    363 packages             
+ !      │ Fixable critical or high vulnerabilities found │    0C     6H     0M     0L  
+ ✓      │ No high-profile vulnerabilities                │    0C     0H     0M     0L  
+ ✓      │ No outdated base images                        │                             
+ ✓      │ No unapproved base images                      │    0 deviations             
+ !      │ Required supply chain attestations missing     │    1 deviation              
+
+What's next:
+    View policy violations → docker scout policy diabetes-api:1.0.0
+    View vulnerabilities → docker scout cves diabetes-api:1.0.0
+    View base image update recommendations → docker scout recommendations diabetes-api:1.0.0
+    Compare with the latest in the registry → docker scout compare --to-latest diabetes-api:1.0.0
+
+--- docker scout cves diabetes-api:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 170 packages
+    ✓ Provenance obtained from attestation
+    ✗ Detected 16 vulnerable packages with a total of 38 vulnerabilities
+
+
+## Overview
+
+                   │                 Analyzed Image                 
+───────────────────┼────────────────────────────────────────────────
+ Target            │  diabetes-api:1.0.0                            
+   digest          │  8f86db632098                                  
+   platform        │ linux/amd64                                    
+   provenance      │ https://github.com/CupoMeridio/scc-project.git 
+                   │  https://github.com/CupoMeridio/scc-project/blob/e3d424c5e251a84f5ae1e9a6b1f217998256ed94      
+   vulnerabilities │    0C     6H     3M    27L     2?              
+   size            │ 113 MB                                         
+   packages        │ 170                                            
+                   │                                                
+ Base image        │  python:3.14.10-slim                           
+                   │  22eafb370920                                  
+
+
+## Packages and Vulnerabilities
+
+   0C     3H     0M     0L  msgpack 1.1.2
+pkg:pypi/msgpack@1.1.2
+
+    ✗ HIGH GHSA-6v7p-g79w-8964 — GitHub [Use After Free]
+      Advisory: GHSA-6v7p-g79w-8964
+      https://scout.docker.com/v/GHSA-6v7p-g79w-8964?s=github&n=msgpack&t=pypi&vr=%3C%3D1.2.0
+      Affected range : <=1.2.0                                      
+      Fixed version  : 1.2.1                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+    ✗ HIGH CVE-2026-57585 — PypA
+      Advisory: PYSEC-2026-3625
+      https://scout.docker.com/v/CVE-2026-57585?s=pypa&n=msgpack&t=pypi&vr=%3C1.2.1
+      Affected range : <1.2.1                                       
+      Fixed version  : 1.2.1                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+    ✗ HIGH CVE-2026-114613 — GitHub [Missing Release of Memory after Effective Lifetime]
+      Advisory: GHSA-j586-36cw-2gc2
+      https://scout.docker.com/v/CVE-2026-114613?s=github&n=msgpack&t=pypi&vr=%3C1.2.3
+      Affected range : <1.2.3                                       
+      Fixed version  : 1.2.3                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+
+   0C     2H     1M     0L  urllib3 2.7.0
+pkg:pypi/urllib3@2.7.0
+
+    ✗ HIGH CVE-2026-97689 — GitHub [Allocation of Resources Without Limits or Throttling]
+      Advisory: GHSA-vxq7-64xx-v4gw
+      https://scout.docker.com/v/CVE-2026-97689?s=github&n=urllib3&t=pypi&vr=%3E%3D1.10.3%2C%3C2.8.0
+      Affected range : >=1.10.3                                                        
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 8.9                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H 
+    
+    ✗ HIGH CVE-2026-97687 — GitHub [Improper Certificate Validation]
+      Advisory: GHSA-8988-9cw3-xx77
+      https://scout.docker.com/v/CVE-2026-97687?s=github&n=urllib3&t=pypi&vr=%3E%3D1.26.0%2C%3C2.8.0
+      Affected range : >=1.26.0                                                        
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 7.6                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N 
+    
+    ✗ MEDIUM CVE-2026-97688 — GitHub [Loop with Unreachable Exit Condition ('Infinite Loop')]
+      Advisory: GHSA-gh4c-6fx4-qh6g
+      https://scout.docker.com/v/CVE-2026-97688?s=github&n=urllib3&t=pypi&vr=%3E%3D2.6.2%2C%3C2.8.0
+      Affected range : >=2.6.2                                                         
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 6.9                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N 
+    
+
+   0C     1H     1M     1L  setuptools 70.3.0
+pkg:pypi/setuptools@70.3.0
+
+    ✗ HIGH CVE-2025-47273 — GitHub [Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')]
+      Advisory: GHSA-5rjg-fvgr-3xxf
+      https://scout.docker.com/v/CVE-2025-47273?s=github&n=setuptools&t=pypi&vr=%3C78.1.1
+      Affected range : <78.1.1                                                             
+      Fixed version  : 78.1.1                                                              
+      CVSS Score     : 7.7                                                                 
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:H/VA:N/SC:N/SI:N/SA:N/E:P 
+    
+    ✗ MEDIUM CVE-2026-59890 — GitHub [Improper Handling of Unicode Encoding]
+      Advisory: GHSA-h35f-9h28-mq5c
+      https://scout.docker.com/v/CVE-2026-59890?s=github&n=setuptools&t=pypi&vr=%3C83.0.0
+      Affected range : <83.0.0                                      
+      Fixed version  : 83.0.0                                       
+      CVSS Score     : 6.1                                          
+      CVSS Vector    : CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N 
+    
+    ✗ LOW GHSA-xmj3-9gf7-h52w — GitHub [Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')]
+      Advisory: GHSA-xmj3-9gf7-h52w
+      https://scout.docker.com/v/GHSA-xmj3-9gf7-h52w?s=github&n=setuptools&t=pypi&vr=%3E%3D38.2.2%2C%3C84.1.0
+      Affected range : >=38.2.2                                                        
+                     : <84.1.0                                                         
+      Fixed version  : 84.1.0                                                          
+      CVSS Score     : 1.0                                                             
+      CVSS Vector    : CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:A/VC:N/VI:L/VA:L/SC:N/SI:N/SA:N 
+    
+
+   0C     0H     1M     1L  tar 1.35+dfsg-3.1
+pkg:deb/debian/tar@1.35%2Bdfsg-3.1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ MEDIUM CVE-2025-45582 — Debian
+      Advisory: CVE-2025-45582
+      https://scout.docker.com/v/CVE-2025-45582?s=debian&n=tar&ns=debian&t=deb&osn=debian&osv=13&vr=%3E%3D1.35%2Bdfsg-3.1
+      Affected range : >=1.35+dfsg-3.1 
+      Fixed version  : not fixed       
+    
+    ✗ LOW CVE-2005-2541 — Debian
+      Advisory: CVE-2005-2541
+      https://scout.docker.com/v/CVE-2005-2541?s=debian&n=tar&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     7L  glibc 2.41-12+deb13u5
+pkg:deb/debian/glibc@2.41-12%2Bdeb13u5?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2019-9192 — Debian
+      Advisory: CVE-2019-9192
+      https://scout.docker.com/v/CVE-2019-9192?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010025 — Debian
+      Advisory: CVE-2019-1010025
+      https://scout.docker.com/v/CVE-2019-1010025?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010024 — Debian
+      Advisory: CVE-2019-1010024
+      https://scout.docker.com/v/CVE-2019-1010024?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010023 — Debian
+      Advisory: CVE-2019-1010023
+      https://scout.docker.com/v/CVE-2019-1010023?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010022 — Debian
+      Advisory: CVE-2019-1010022
+      https://scout.docker.com/v/CVE-2019-1010022?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2018-20796 — Debian
+      Advisory: CVE-2018-20796
+      https://scout.docker.com/v/CVE-2018-20796?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2010-4756 — Debian
+      Advisory: CVE-2010-4756
+      https://scout.docker.com/v/CVE-2010-4756?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     4L  systemd 257.13-1~deb13u1
+pkg:deb/debian/systemd@257.13-1~deb13u1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2023-31439 — Debian
+      Advisory: CVE-2023-31439
+      https://scout.docker.com/v/CVE-2023-31439?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2023-31438 — Debian
+      Advisory: CVE-2023-31438
+      https://scout.docker.com/v/CVE-2023-31438?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2023-31437 — Debian
+      Advisory: CVE-2023-31437
+      https://scout.docker.com/v/CVE-2023-31437?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2013-4392 — Debian
+      Advisory: CVE-2013-4392
+      https://scout.docker.com/v/CVE-2013-4392?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     4L  coreutils 9.7-3
+pkg:deb/debian/coreutils@9.7-3?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-56392 — Debian
+      Advisory: CVE-2026-56392
+      https://scout.docker.com/v/CVE-2026-56392?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2026-56391 — Debian
+      Advisory: CVE-2026-56391
+      https://scout.docker.com/v/CVE-2026-56391?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2025-5278 — Debian
+      Advisory: CVE-2025-5278
+      https://scout.docker.com/v/CVE-2025-5278?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2017-18018 — Debian
+      Advisory: CVE-2017-18018
+      https://scout.docker.com/v/CVE-2017-18018?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     2L  sqlite3 3.46.1-7+deb13u2
+pkg:deb/debian/sqlite3@3.46.1-7%2Bdeb13u2?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2025-70873 — Debian
+      Advisory: CVE-2025-70873
+      https://scout.docker.com/v/CVE-2025-70873?s=debian&n=sqlite3&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2021-45346 — Debian
+      Advisory: CVE-2021-45346
+      https://scout.docker.com/v/CVE-2021-45346?s=debian&n=sqlite3&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     2L  dash 0.5.12-12
+pkg:deb/debian/dash@0.5.12-12?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-102474 — Debian
+      Advisory: CVE-2026-102474
+      https://scout.docker.com/v/CVE-2026-102474?s=debian&n=dash&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2026-102473 — Debian
+      Advisory: CVE-2026-102473
+      https://scout.docker.com/v/CVE-2026-102473?s=debian&n=dash&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L     1?  shadow 1:4.17.4-2
+pkg:deb/debian/shadow@1%3A4.17.4-2?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2007-5686 — Debian
+      Advisory: CVE-2007-5686
+      https://scout.docker.com/v/CVE-2007-5686?s=debian&n=shadow&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ UNSPECIFIED CVE-2026-135901 — Debian
+      Advisory: CVE-2026-135901
+      https://scout.docker.com/v/CVE-2026-135901?s=debian&n=shadow&ns=debian&t=deb&osn=debian&osv=13&vr=%3C1%3A4.17.4-2%2Bdeb13u1
+      Affected range : <1:4.17.4-2+deb13u1 
+      Fixed version  : 1:4.17.4-2+deb13u1  
+    
+
+   0C     0H     0M     1L  perl 5.40.1-6+deb13u1
+pkg:deb/debian/perl@5.40.1-6%2Bdeb13u1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2011-4116 — Debian
+      Advisory: CVE-2011-4116
+      https://scout.docker.com/v/CVE-2011-4116?s=debian&n=perl&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  openssl 3.5.9-1~deb13u1
+pkg:deb/debian/openssl@3.5.9-1~deb13u1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2010-0928 — Debian
+      Advisory: CVE-2010-0928
+      https://scout.docker.com/v/CVE-2010-0928?s=debian&n=openssl&ns=debian&t=deb&osn=debian&osv=13&vr=%3E%3D3.2.1-3
+      Affected range : >=3.2.1-3 
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  diffutils 1:3.10-4
+pkg:deb/debian/diffutils@1%3A3.10-4?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-53910 — Debian
+      Advisory: CVE-2026-53910
+      https://scout.docker.com/v/CVE-2026-53910?s=debian&n=diffutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  apt 3.0.4
+pkg:deb/debian/apt@3.0.4?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2011-3374 — Debian
+      Advisory: CVE-2011-3374
+      https://scout.docker.com/v/CVE-2011-3374?s=debian&n=apt&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  util-linux 2.41.5-0+deb13u1
+pkg:deb/debian/util-linux@2.41.5-0%2Bdeb13u1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2022-0563 — Debian
+      Advisory: CVE-2022-0563
+      https://scout.docker.com/v/CVE-2022-0563?s=debian&n=util-linux&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     0L     1?  libzstd 1.5.7+dfsg-1
+pkg:deb/debian/libzstd@1.5.7%2Bdfsg-1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ UNSPECIFIED CVE-2026-124851 — Debian
+      Advisory: CVE-2026-124851
+      https://scout.docker.com/v/CVE-2026-124851?s=debian&n=libzstd&ns=debian&t=deb&osn=debian&osv=13&vr=%3C1.5.7%2Bdfsg-1%2Bdeb13u1
+      Affected range : <1.5.7+dfsg-1+deb13u1 
+      Fixed version  : 1.5.7+dfsg-1+deb13u1  
+    
+
+
+38 vulnerabilities found in 16 packages
+  CRITICAL     0  
+  HIGH         6  
+  MEDIUM       3  
+  LOW          27 
+  UNSPECIFIED  2  
+
+
+What's next:
+    View base image update recommendations → docker scout recommendations diabetes-api:1.0.0
+
+
+--- docker image inspect diabetes-saas-api:1.0.0 (ID / Created) ---
+sha256:aefadac9f2db3e5870c3946e7725e389b710dee7815c3e33cbf981e188b25ee0 2026-11-27T20:10:09.291346071+01:00
+--- docker scout quickview diabetes-saas-api:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 180 packages
+    ✓ Provenance obtained from attestation
+    ...Evaluating policies
+    ✓ Policy evaluation completed
+
+ Target             │  diabetes-saas-api:1.0.0  │    0C     6H     3M    27L     2?  
+   digest           │  aefadac9f2db             │                                    
+ Base image         │  python:3.14.10-slim      │    0C     6H     3M    27L     2?  
+ Updated base image │  python:3.15.2-slim       │    0C     6H     3M    27L     2?  
+                    │                           │                                    
+
+Policy status  FAILED  (4/7 policies met)
+Health score  C  (56%)
+
+ Status │                     Policy                     │           Results           
+────────┼────────────────────────────────────────────────┼─────────────────────────────
+ ✓      │ Default non-root user                          │                             
+ !      │ Copyleft licensed packages found               │    366 packages             
+ !      │ Fixable critical or high vulnerabilities found │    0C     6H     0M     0L  
+ ✓      │ No high-profile vulnerabilities                │    0C     0H     0M     0L  
+ ✓      │ No outdated base images                        │                             
+ ✓      │ No unapproved base images                      │    0 deviations             
+ !      │ Required supply chain attestations missing     │    1 deviation              
+
+What's next:
+    View policy violations → docker scout policy diabetes-saas-api:1.0.0
+    View vulnerabilities → docker scout cves diabetes-saas-api:1.0.0
+    View base image update recommendations → docker scout recommendations diabetes-saas-api:1.0.0
+    Compare with the latest in the registry → docker scout compare --to-latest diabetes-saas-api:1.0.0
+
+--- docker scout cves diabetes-saas-api:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 180 packages
+    ✓ Provenance obtained from attestation
+    ✗ Detected 16 vulnerable packages with a total of 38 vulnerabilities
+
+
+## Overview
+
+                   │                 Analyzed Image                 
+───────────────────┼────────────────────────────────────────────────
+ Target            │  diabetes-saas-api:1.0.0                       
+   digest          │  aefadac9f2db                                  
+   platform        │ linux/amd64                                    
+   provenance      │ https://github.com/CupoMeridio/scc-project.git 
+                   │  https://github.com/CupoMeridio/scc-project/blob/e3d424c5e251a84f5ae1e9a6b1f217998256ed94      
+   vulnerabilities │    0C     6H     3M    27L     2?              
+   size            │ 79 MB                                          
+   packages        │ 180                                            
+                   │                                                
+ Base image        │  python:3.14.10-slim                           
+                   │  22eafb370920                                  
+
+
+## Packages and Vulnerabilities
+
+   0C     3H     0M     0L  msgpack 1.1.2
+pkg:pypi/msgpack@1.1.2
+
+    ✗ HIGH GHSA-6v7p-g79w-8964 — GitHub [Use After Free]
+      Advisory: GHSA-6v7p-g79w-8964
+      https://scout.docker.com/v/GHSA-6v7p-g79w-8964?s=github&n=msgpack&t=pypi&vr=%3C%3D1.2.0
+      Affected range : <=1.2.0                                      
+      Fixed version  : 1.2.1                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+    ✗ HIGH CVE-2026-57585 — PypA
+      Advisory: PYSEC-2026-3625
+      https://scout.docker.com/v/CVE-2026-57585?s=pypa&n=msgpack&t=pypi&vr=%3C1.2.1
+      Affected range : <1.2.1                                       
+      Fixed version  : 1.2.1                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+    ✗ HIGH CVE-2026-114613 — GitHub [Missing Release of Memory after Effective Lifetime]
+      Advisory: GHSA-j586-36cw-2gc2
+      https://scout.docker.com/v/CVE-2026-114613?s=github&n=msgpack&t=pypi&vr=%3C1.2.3
+      Affected range : <1.2.3                                       
+      Fixed version  : 1.2.3                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+
+   0C     2H     1M     0L  urllib3 2.7.0
+pkg:pypi/urllib3@2.7.0
+
+    ✗ HIGH CVE-2026-97689 — GitHub [Allocation of Resources Without Limits or Throttling]
+      Advisory: GHSA-vxq7-64xx-v4gw
+      https://scout.docker.com/v/CVE-2026-97689?s=github&n=urllib3&t=pypi&vr=%3E%3D1.10.3%2C%3C2.8.0
+      Affected range : >=1.10.3                                                        
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 8.9                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H 
+    
+    ✗ HIGH CVE-2026-97687 — GitHub [Improper Certificate Validation]
+      Advisory: GHSA-8988-9cw3-xx77
+      https://scout.docker.com/v/CVE-2026-97687?s=github&n=urllib3&t=pypi&vr=%3E%3D1.26.0%2C%3C2.8.0
+      Affected range : >=1.26.0                                                        
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 7.6                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N 
+    
+    ✗ MEDIUM CVE-2026-97688 — GitHub [Loop with Unreachable Exit Condition ('Infinite Loop')]
+      Advisory: GHSA-gh4c-6fx4-qh6g
+      https://scout.docker.com/v/CVE-2026-97688?s=github&n=urllib3&t=pypi&vr=%3E%3D2.6.2%2C%3C2.8.0
+      Affected range : >=2.6.2                                                         
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 6.9                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N 
+    
+
+   0C     1H     1M     1L  setuptools 70.3.0
+pkg:pypi/setuptools@70.3.0
+
+    ✗ HIGH CVE-2025-47273 — GitHub [Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')]
+      Advisory: GHSA-5rjg-fvgr-3xxf
+      https://scout.docker.com/v/CVE-2025-47273?s=github&n=setuptools&t=pypi&vr=%3C78.1.1
+      Affected range : <78.1.1                                                             
+      Fixed version  : 78.1.1                                                              
+      CVSS Score     : 7.7                                                                 
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:H/VA:N/SC:N/SI:N/SA:N/E:P 
+    
+    ✗ MEDIUM CVE-2026-59890 — GitHub [Improper Handling of Unicode Encoding]
+      Advisory: GHSA-h35f-9h28-mq5c
+      https://scout.docker.com/v/CVE-2026-59890?s=github&n=setuptools&t=pypi&vr=%3C83.0.0
+      Affected range : <83.0.0                                      
+      Fixed version  : 83.0.0                                       
+      CVSS Score     : 6.1                                          
+      CVSS Vector    : CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N 
+    
+    ✗ LOW GHSA-xmj3-9gf7-h52w — GitHub [Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')]
+      Advisory: GHSA-xmj3-9gf7-h52w
+      https://scout.docker.com/v/GHSA-xmj3-9gf7-h52w?s=github&n=setuptools&t=pypi&vr=%3E%3D38.2.2%2C%3C84.1.0
+      Affected range : >=38.2.2                                                        
+                     : <84.1.0                                                         
+      Fixed version  : 84.1.0                                                          
+      CVSS Score     : 1.0                                                             
+      CVSS Vector    : CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:A/VC:N/VI:L/VA:L/SC:N/SI:N/SA:N 
+    
+
+   0C     0H     1M     1L  tar 1.35+dfsg-3.1
+pkg:deb/debian/tar@1.35%2Bdfsg-3.1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ MEDIUM CVE-2025-45582 — Debian
+      Advisory: CVE-2025-45582
+      https://scout.docker.com/v/CVE-2025-45582?s=debian&n=tar&ns=debian&t=deb&osn=debian&osv=13&vr=%3E%3D1.35%2Bdfsg-3.1
+      Affected range : >=1.35+dfsg-3.1 
+      Fixed version  : not fixed       
+    
+    ✗ LOW CVE-2005-2541 — Debian
+      Advisory: CVE-2005-2541
+      https://scout.docker.com/v/CVE-2005-2541?s=debian&n=tar&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     7L  glibc 2.41-12+deb13u5
+pkg:deb/debian/glibc@2.41-12%2Bdeb13u5?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2019-9192 — Debian
+      Advisory: CVE-2019-9192
+      https://scout.docker.com/v/CVE-2019-9192?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010025 — Debian
+      Advisory: CVE-2019-1010025
+      https://scout.docker.com/v/CVE-2019-1010025?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010024 — Debian
+      Advisory: CVE-2019-1010024
+      https://scout.docker.com/v/CVE-2019-1010024?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010023 — Debian
+      Advisory: CVE-2019-1010023
+      https://scout.docker.com/v/CVE-2019-1010023?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010022 — Debian
+      Advisory: CVE-2019-1010022
+      https://scout.docker.com/v/CVE-2019-1010022?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2018-20796 — Debian
+      Advisory: CVE-2018-20796
+      https://scout.docker.com/v/CVE-2018-20796?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2010-4756 — Debian
+      Advisory: CVE-2010-4756
+      https://scout.docker.com/v/CVE-2010-4756?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     4L  coreutils 9.7-3
+pkg:deb/debian/coreutils@9.7-3?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-56392 — Debian
+      Advisory: CVE-2026-56392
+      https://scout.docker.com/v/CVE-2026-56392?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2026-56391 — Debian
+      Advisory: CVE-2026-56391
+      https://scout.docker.com/v/CVE-2026-56391?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2025-5278 — Debian
+      Advisory: CVE-2025-5278
+      https://scout.docker.com/v/CVE-2025-5278?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2017-18018 — Debian
+      Advisory: CVE-2017-18018
+      https://scout.docker.com/v/CVE-2017-18018?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     4L  systemd 257.13-1~deb13u1
+pkg:deb/debian/systemd@257.13-1~deb13u1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2023-31439 — Debian
+      Advisory: CVE-2023-31439
+      https://scout.docker.com/v/CVE-2023-31439?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2023-31438 — Debian
+      Advisory: CVE-2023-31438
+      https://scout.docker.com/v/CVE-2023-31438?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2023-31437 — Debian
+      Advisory: CVE-2023-31437
+      https://scout.docker.com/v/CVE-2023-31437?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2013-4392 — Debian
+      Advisory: CVE-2013-4392
+      https://scout.docker.com/v/CVE-2013-4392?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     2L  sqlite3 3.46.1-7+deb13u2
+pkg:deb/debian/sqlite3@3.46.1-7%2Bdeb13u2?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2025-70873 — Debian
+      Advisory: CVE-2025-70873
+      https://scout.docker.com/v/CVE-2025-70873?s=debian&n=sqlite3&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2021-45346 — Debian
+      Advisory: CVE-2021-45346
+      https://scout.docker.com/v/CVE-2021-45346?s=debian&n=sqlite3&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     2L  dash 0.5.12-12
+pkg:deb/debian/dash@0.5.12-12?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-102474 — Debian
+      Advisory: CVE-2026-102474
+      https://scout.docker.com/v/CVE-2026-102474?s=debian&n=dash&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2026-102473 — Debian
+      Advisory: CVE-2026-102473
+      https://scout.docker.com/v/CVE-2026-102473?s=debian&n=dash&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L     1?  shadow 1:4.17.4-2
+pkg:deb/debian/shadow@1%3A4.17.4-2?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2007-5686 — Debian
+      Advisory: CVE-2007-5686
+      https://scout.docker.com/v/CVE-2007-5686?s=debian&n=shadow&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ UNSPECIFIED CVE-2026-135901 — Debian
+      Advisory: CVE-2026-135901
+      https://scout.docker.com/v/CVE-2026-135901?s=debian&n=shadow&ns=debian&t=deb&osn=debian&osv=13&vr=%3C1%3A4.17.4-2%2Bdeb13u1
+      Affected range : <1:4.17.4-2+deb13u1 
+      Fixed version  : 1:4.17.4-2+deb13u1  
+    
+
+   0C     0H     0M     1L  util-linux 2.41.5-0+deb13u1
+pkg:deb/debian/util-linux@2.41.5-0%2Bdeb13u1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2022-0563 — Debian
+      Advisory: CVE-2022-0563
+      https://scout.docker.com/v/CVE-2022-0563?s=debian&n=util-linux&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  diffutils 1:3.10-4
+pkg:deb/debian/diffutils@1%3A3.10-4?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-53910 — Debian
+      Advisory: CVE-2026-53910
+      https://scout.docker.com/v/CVE-2026-53910?s=debian&n=diffutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  perl 5.40.1-6+deb13u1
+pkg:deb/debian/perl@5.40.1-6%2Bdeb13u1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2011-4116 — Debian
+      Advisory: CVE-2011-4116
+      https://scout.docker.com/v/CVE-2011-4116?s=debian&n=perl&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  apt 3.0.4
+pkg:deb/debian/apt@3.0.4?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2011-3374 — Debian
+      Advisory: CVE-2011-3374
+      https://scout.docker.com/v/CVE-2011-3374?s=debian&n=apt&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  openssl 3.5.9-1~deb13u1
+pkg:deb/debian/openssl@3.5.9-1~deb13u1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2010-0928 — Debian
+      Advisory: CVE-2010-0928
+      https://scout.docker.com/v/CVE-2010-0928?s=debian&n=openssl&ns=debian&t=deb&osn=debian&osv=13&vr=%3E%3D3.2.1-3
+      Affected range : >=3.2.1-3 
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     0L     1?  libzstd 1.5.7+dfsg-1
+pkg:deb/debian/libzstd@1.5.7%2Bdfsg-1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ UNSPECIFIED CVE-2026-124851 — Debian
+      Advisory: CVE-2026-124851
+      https://scout.docker.com/v/CVE-2026-124851?s=debian&n=libzstd&ns=debian&t=deb&osn=debian&osv=13&vr=%3C1.5.7%2Bdfsg-1%2Bdeb13u1
+      Affected range : <1.5.7+dfsg-1+deb13u1 
+      Fixed version  : 1.5.7+dfsg-1+deb13u1  
+    
+
+
+38 vulnerabilities found in 16 packages
+  CRITICAL     0  
+  HIGH         6  
+  MEDIUM       3  
+  LOW          27 
+  UNSPECIFIED  2  
+
+
+What's next:
+    View base image update recommendations → docker scout recommendations diabetes-saas-api:1.0.0
+
+
+--- docker image inspect diabetes-frontend:1.0.0 (ID / Created) ---
+sha256:6a6e85bd6b780c89f041211a8fa4d635e76e0fe79fcba3ab71e66742a0552dbe 2026-11-27T21:00:18.625310181+01:00
+--- docker scout quickview diabetes-frontend:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 26 packages
+    ✓ Provenance obtained from attestation
+    ...Pulling
+    ✓ Pulled
+    ...Evaluating policies
+    ✓ Policy evaluation completed
+
+ Target     │  diabetes-frontend:1.0.0                  │    1C     6H     1M     0L  
+   digest   │  6a6e85bd6b78                             │                             
+ Base image │  nginxinc/nginx-unprivileged:alpine-slim  │    1C     6H     1M     0L  
+
+Policy status  FAILED  (4/7 policies met)
+Health score  C  (56%)
+
+ Status │                     Policy                     │           Results           
+────────┼────────────────────────────────────────────────┼─────────────────────────────
+ ✓      │ Default non-root user                          │                             
+ !      │ Copyleft licensed packages found               │    18 packages              
+ !      │ Fixable critical or high vulnerabilities found │    1C     6H     0M     0L  
+ ✓      │ No high-profile vulnerabilities                │    0C     0H     0M     0L  
+ ✓      │ No outdated base images                        │                             
+ ✓      │ No unapproved base images                      │    0 deviations             
+ !      │ Required supply chain attestations missing     │    1 deviation              
+
+What's next:
+    View policy violations → docker scout policy diabetes-frontend:1.0.0
+    View vulnerabilities → docker scout cves diabetes-frontend:1.0.0
+    Compare with the latest in the registry → docker scout compare --to-latest diabetes-frontend:1.0.0
+
+--- docker scout cves diabetes-frontend:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 26 packages
+    ✓ Provenance obtained from attestation
+    ...Pulling
+    ✓ Pulled
+    ✗ Detected 3 vulnerable packages with a total of 8 vulnerabilities
+
+
+## Overview
+
+                   │                 Analyzed Image                 
+───────────────────┼────────────────────────────────────────────────
+ Target            │  diabetes-frontend:1.0.0                       
+   digest          │  6a6e85bd6b78                                  
+   platform        │ linux/amd64                                    
+   provenance      │ https://github.com/CupoMeridio/scc-project.git 
+                   │  https://github.com/CupoMeridio/scc-project/blob/e3d424c5e251a84f5ae1e9a6b1f217998256ed94      
+   vulnerabilities │    1C     6H     1M     0L                     
+   size            │ 8.4 MB                                         
+   packages        │ 26                                             
+                   │                                                
+ Base image        │  nginxinc/nginx-unprivileged:alpine-slim       
+                   │  52c82c7ad265                                  
+
+
+## Packages and Vulnerabilities
+
+   1C     1H     0M     0L  zlib 1.3.2-r0
+pkg:apk/alpine/zlib@1.3.2-r0?arch=x86_64&os_name=alpine&os_version=3.24
+
+    ✗ CRITICAL CVE-2026-4738 — Alpine
+      Advisory: CVE-2026-4738
+      https://scout.docker.com/v/CVE-2026-4738?s=alpine&n=zlib&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C1.4-r0
+      Affected range : <1.4-r0 
+      Fixed version  : 1.4-r0  
+    
+    ✗ HIGH CVE-2026-85091 — Alpine
+      Advisory: CVE-2026-85091
+      https://scout.docker.com/v/CVE-2026-85091?s=alpine&n=zlib&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C1.3.2-r1
+      Affected range : <1.3.2-r1 
+      Fixed version  : 1.3.2-r1  
+    
+
+   0C     4H     1M     0L  openssl 3.5.9-r0
+pkg:apk/alpine/openssl@3.5.9-r0?os_name=alpine&os_version=3.24
+
+    ✗ HIGH CVE-2026-95691 — Alpine
+      Advisory: CVE-2026-95691
+      https://scout.docker.com/v/CVE-2026-95691?s=alpine&n=openssl&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C3.5.9-r1
+      Affected range : <3.5.9-r1 
+      Fixed version  : 3.5.9-r1  
+    
+    ✗ HIGH CVE-2026-95692 — Alpine
+      Advisory: CVE-2026-95692
+      https://scout.docker.com/v/CVE-2026-95692?s=alpine&n=openssl&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C3.5.9-r1
+      Affected range : <3.5.9-r1 
+      Fixed version  : 3.5.9-r1  
+    
+    ✗ HIGH CVE-2026-88823 — Alpine
+      Advisory: CVE-2026-88823
+      https://scout.docker.com/v/CVE-2026-88823?s=alpine&n=openssl&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C3.5.9-r1
+      Affected range : <3.5.9-r1 
+      Fixed version  : 3.5.9-r1  
+    
+    ✗ HIGH CVE-2026-107496 — Alpine
+      Advisory: CVE-2026-107496
+      https://scout.docker.com/v/CVE-2026-107496?s=alpine&n=openssl&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C3.5.9-r1
+      Affected range : <3.5.9-r1 
+      Fixed version  : 3.5.9-r1  
+    
+    ✗ MEDIUM CVE-2026-88822 — Alpine
+      Advisory: CVE-2026-88822
+      https://scout.docker.com/v/CVE-2026-88822?s=alpine&n=openssl&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C3.5.9-r1
+      Affected range : <3.5.9-r1 
+      Fixed version  : 3.5.9-r1  
+    
+
+   0C     1H     0M     0L  musl 1.2.6-r2
+pkg:apk/alpine/musl@1.2.6-r2?arch=x86_64&os_name=alpine&os_version=3.24
+
+    ✗ HIGH CVE-2026-107891 — Alpine
+      Advisory: CVE-2026-107891
+      https://scout.docker.com/v/CVE-2026-107891?s=alpine&n=musl&ns=alpine&t=apk&osn=alpine&osv=3.24&vr=%3C1.2.6-r6
+      Affected range : <1.2.6-r6 
+      Fixed version  : 1.2.6-r6  
+    
+
+
+8 vulnerabilities found in 3 packages
+  CRITICAL  1 
+  HIGH      6 
+  MEDIUM    1 
+  LOW       0 
+
+
+What's next:
+    View base image update recommendations → docker scout recommendations diabetes-frontend:1.0.0
+
+
+--- docker image inspect diabetes-trainer:1.0.0 (ID / Created) ---
+sha256:562de514a261b0acdc10cd1a1340c950bb1155213a6bc4af78c46eb0444fb74f 2026-11-27T21:33:05.40423003+01:00
+--- docker scout quickview diabetes-trainer:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 192 packages
+    ✓ Provenance obtained from attestation
+    ...Evaluating policies
+    ✓ Policy evaluation completed
+
+ Target             │  diabetes-trainer:1.0.0  │    0C     6H     3M    27L     2?  
+   digest           │  562de514a261            │                                    
+ Base image         │  python:3.14.10-slim     │    0C     6H     3M    27L     2?  
+ Updated base image │  python:3.15.2-slim      │    0C     6H     3M    27L     2?  
+                    │                          │                                    
+
+Policy status  FAILED  (4/7 policies met)
+Health score  C  (56%)
+
+ Status │                     Policy                     │           Results           
+────────┼────────────────────────────────────────────────┼─────────────────────────────
+ ✓      │ Default non-root user                          │                             
+ !      │ Copyleft licensed packages found               │    366 packages             
+ !      │ Fixable critical or high vulnerabilities found │    0C     6H     0M     0L  
+ ✓      │ No high-profile vulnerabilities                │    0C     0H     0M     0L  
+ ✓      │ No outdated base images                        │                             
+ ✓      │ No unapproved base images                      │    0 deviations             
+ !      │ Required supply chain attestations missing     │    1 deviation              
+
+What's next:
+    View policy violations → docker scout policy diabetes-trainer:1.0.0
+    View vulnerabilities → docker scout cves diabetes-trainer:1.0.0
+    View base image update recommendations → docker scout recommendations diabetes-trainer:1.0.0
+    Compare with the latest in the registry → docker scout compare --to-latest diabetes-trainer:1.0.0
+
+--- docker scout cves diabetes-trainer:1.0.0 ---
+    ...Storing image for indexing
+    ✓ Image stored for indexing
+    ...Indexing
+    ✓ Indexed 192 packages
+    ✓ Provenance obtained from attestation
+    ✗ Detected 16 vulnerable packages with a total of 38 vulnerabilities
+
+
+## Overview
+
+                   │                 Analyzed Image                 
+───────────────────┼────────────────────────────────────────────────
+ Target            │  diabetes-trainer:1.0.0                        
+   digest          │  562de514a261                                  
+   platform        │ linux/amd64                                    
+   provenance      │ https://github.com/CupoMeridio/scc-project.git 
+                   │  https://github.com/CupoMeridio/scc-project/blob/e3d424c5e251a84f5ae1e9a6b1f217998256ed94      
+   vulnerabilities │    0C     6H     3M    27L     2?              
+   size            │ 400 MB                                         
+   packages        │ 192                                            
+                   │                                                
+ Base image        │  python:3.14.10-slim                           
+                   │  22eafb370920                                  
+
+
+## Packages and Vulnerabilities
+
+   0C     3H     0M     0L  msgpack 1.1.2
+pkg:pypi/msgpack@1.1.2
+
+    ✗ HIGH GHSA-6v7p-g79w-8964 — GitHub [Use After Free]
+      Advisory: GHSA-6v7p-g79w-8964
+      https://scout.docker.com/v/GHSA-6v7p-g79w-8964?s=github&n=msgpack&t=pypi&vr=%3C%3D1.2.0
+      Affected range : <=1.2.0                                      
+      Fixed version  : 1.2.1                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+    ✗ HIGH CVE-2026-57585 — PypA
+      Advisory: PYSEC-2026-3625
+      https://scout.docker.com/v/CVE-2026-57585?s=pypa&n=msgpack&t=pypi&vr=%3C1.2.1
+      Affected range : <1.2.1                                       
+      Fixed version  : 1.2.1                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+    ✗ HIGH CVE-2026-114613 — GitHub [Missing Release of Memory after Effective Lifetime]
+      Advisory: GHSA-j586-36cw-2gc2
+      https://scout.docker.com/v/CVE-2026-114613?s=github&n=msgpack&t=pypi&vr=%3C1.2.3
+      Affected range : <1.2.3                                       
+      Fixed version  : 1.2.3                                        
+      CVSS Score     : 7.5                                          
+      CVSS Vector    : CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H 
+    
+
+   0C     2H     1M     0L  urllib3 2.7.0
+pkg:pypi/urllib3@2.7.0
+
+    ✗ HIGH CVE-2026-97689 — GitHub [Allocation of Resources Without Limits or Throttling]
+      Advisory: GHSA-vxq7-64xx-v4gw
+      https://scout.docker.com/v/CVE-2026-97689?s=github&n=urllib3&t=pypi&vr=%3E%3D1.10.3%2C%3C2.8.0
+      Affected range : >=1.10.3                                                        
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 8.9                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H 
+    
+    ✗ HIGH CVE-2026-97687 — GitHub [Improper Certificate Validation]
+      Advisory: GHSA-8988-9cw3-xx77
+      https://scout.docker.com/v/CVE-2026-97687?s=github&n=urllib3&t=pypi&vr=%3E%3D1.26.0%2C%3C2.8.0
+      Affected range : >=1.26.0                                                        
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 7.6                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N 
+    
+    ✗ MEDIUM CVE-2026-97688 — GitHub [Loop with Unreachable Exit Condition ('Infinite Loop')]
+      Advisory: GHSA-gh4c-6fx4-qh6g
+      https://scout.docker.com/v/CVE-2026-97688?s=github&n=urllib3&t=pypi&vr=%3E%3D2.6.2%2C%3C2.8.0
+      Affected range : >=2.6.2                                                         
+                     : <2.8.0                                                          
+      Fixed version  : 2.8.0                                                           
+      CVSS Score     : 6.9                                                             
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N 
+    
+
+   0C     1H     1M     1L  setuptools 70.3.0
+pkg:pypi/setuptools@70.3.0
+
+    ✗ HIGH CVE-2025-47273 — GitHub [Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')]
+      Advisory: GHSA-5rjg-fvgr-3xxf
+      https://scout.docker.com/v/CVE-2025-47273?s=github&n=setuptools&t=pypi&vr=%3C78.1.1
+      Affected range : <78.1.1                                                             
+      Fixed version  : 78.1.1                                                              
+      CVSS Score     : 7.7                                                                 
+      CVSS Vector    : CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:H/VA:N/SC:N/SI:N/SA:N/E:P 
+    
+    ✗ MEDIUM CVE-2026-59890 — GitHub [Improper Handling of Unicode Encoding]
+      Advisory: GHSA-h35f-9h28-mq5c
+      https://scout.docker.com/v/CVE-2026-59890?s=github&n=setuptools&t=pypi&vr=%3C83.0.0
+      Affected range : <83.0.0                                      
+      Fixed version  : 83.0.0                                       
+      CVSS Score     : 6.1                                          
+      CVSS Vector    : CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N 
+    
+    ✗ LOW GHSA-xmj3-9gf7-h52w — GitHub [Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')]
+      Advisory: GHSA-xmj3-9gf7-h52w
+      https://scout.docker.com/v/GHSA-xmj3-9gf7-h52w?s=github&n=setuptools&t=pypi&vr=%3E%3D38.2.2%2C%3C84.1.0
+      Affected range : >=38.2.2                                                        
+                     : <84.1.0                                                         
+      Fixed version  : 84.1.0                                                          
+      CVSS Score     : 1.0                                                             
+      CVSS Vector    : CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:A/VC:N/VI:L/VA:L/SC:N/SI:N/SA:N 
+    
+
+   0C     0H     1M     1L  tar 1.35+dfsg-3.1
+pkg:deb/debian/tar@1.35%2Bdfsg-3.1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ MEDIUM CVE-2025-45582 — Debian
+      Advisory: CVE-2025-45582
+      https://scout.docker.com/v/CVE-2025-45582?s=debian&n=tar&ns=debian&t=deb&osn=debian&osv=13&vr=%3E%3D1.35%2Bdfsg-3.1
+      Affected range : >=1.35+dfsg-3.1 
+      Fixed version  : not fixed       
+    
+    ✗ LOW CVE-2005-2541 — Debian
+      Advisory: CVE-2005-2541
+      https://scout.docker.com/v/CVE-2005-2541?s=debian&n=tar&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     7L  glibc 2.41-12+deb13u5
+pkg:deb/debian/glibc@2.41-12%2Bdeb13u5?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2019-9192 — Debian
+      Advisory: CVE-2019-9192
+      https://scout.docker.com/v/CVE-2019-9192?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010025 — Debian
+      Advisory: CVE-2019-1010025
+      https://scout.docker.com/v/CVE-2019-1010025?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010024 — Debian
+      Advisory: CVE-2019-1010024
+      https://scout.docker.com/v/CVE-2019-1010024?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010023 — Debian
+      Advisory: CVE-2019-1010023
+      https://scout.docker.com/v/CVE-2019-1010023?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2019-1010022 — Debian
+      Advisory: CVE-2019-1010022
+      https://scout.docker.com/v/CVE-2019-1010022?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2018-20796 — Debian
+      Advisory: CVE-2018-20796
+      https://scout.docker.com/v/CVE-2018-20796?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2010-4756 — Debian
+      Advisory: CVE-2010-4756
+      https://scout.docker.com/v/CVE-2010-4756?s=debian&n=glibc&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     4L  systemd 257.13-1~deb13u1
+pkg:deb/debian/systemd@257.13-1~deb13u1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2023-31439 — Debian
+      Advisory: CVE-2023-31439
+      https://scout.docker.com/v/CVE-2023-31439?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2023-31438 — Debian
+      Advisory: CVE-2023-31438
+      https://scout.docker.com/v/CVE-2023-31438?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2023-31437 — Debian
+      Advisory: CVE-2023-31437
+      https://scout.docker.com/v/CVE-2023-31437?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2013-4392 — Debian
+      Advisory: CVE-2013-4392
+      https://scout.docker.com/v/CVE-2013-4392?s=debian&n=systemd&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     4L  coreutils 9.7-3
+pkg:deb/debian/coreutils@9.7-3?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-56392 — Debian
+      Advisory: CVE-2026-56392
+      https://scout.docker.com/v/CVE-2026-56392?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2026-56391 — Debian
+      Advisory: CVE-2026-56391
+      https://scout.docker.com/v/CVE-2026-56391?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2025-5278 — Debian
+      Advisory: CVE-2025-5278
+      https://scout.docker.com/v/CVE-2025-5278?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2017-18018 — Debian
+      Advisory: CVE-2017-18018
+      https://scout.docker.com/v/CVE-2017-18018?s=debian&n=coreutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     2L  sqlite3 3.46.1-7+deb13u2
+pkg:deb/debian/sqlite3@3.46.1-7%2Bdeb13u2?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2025-70873 — Debian
+      Advisory: CVE-2025-70873
+      https://scout.docker.com/v/CVE-2025-70873?s=debian&n=sqlite3&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2021-45346 — Debian
+      Advisory: CVE-2021-45346
+      https://scout.docker.com/v/CVE-2021-45346?s=debian&n=sqlite3&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     2L  dash 0.5.12-12
+pkg:deb/debian/dash@0.5.12-12?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-102474 — Debian
+      Advisory: CVE-2026-102474
+      https://scout.docker.com/v/CVE-2026-102474?s=debian&n=dash&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ LOW CVE-2026-102473 — Debian
+      Advisory: CVE-2026-102473
+      https://scout.docker.com/v/CVE-2026-102473?s=debian&n=dash&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L     1?  shadow 1:4.17.4-2
+pkg:deb/debian/shadow@1%3A4.17.4-2?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2007-5686 — Debian
+      Advisory: CVE-2007-5686
+      https://scout.docker.com/v/CVE-2007-5686?s=debian&n=shadow&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+    ✗ UNSPECIFIED CVE-2026-135901 — Debian
+      Advisory: CVE-2026-135901
+      https://scout.docker.com/v/CVE-2026-135901?s=debian&n=shadow&ns=debian&t=deb&osn=debian&osv=13&vr=%3C1%3A4.17.4-2%2Bdeb13u1
+      Affected range : <1:4.17.4-2+deb13u1 
+      Fixed version  : 1:4.17.4-2+deb13u1  
+    
+
+   0C     0H     0M     1L  perl 5.40.1-6+deb13u1
+pkg:deb/debian/perl@5.40.1-6%2Bdeb13u1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2011-4116 — Debian
+      Advisory: CVE-2011-4116
+      https://scout.docker.com/v/CVE-2011-4116?s=debian&n=perl&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  apt 3.0.4
+pkg:deb/debian/apt@3.0.4?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2011-3374 — Debian
+      Advisory: CVE-2011-3374
+      https://scout.docker.com/v/CVE-2011-3374?s=debian&n=apt&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  openssl 3.5.9-1~deb13u1
+pkg:deb/debian/openssl@3.5.9-1~deb13u1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2010-0928 — Debian
+      Advisory: CVE-2010-0928
+      https://scout.docker.com/v/CVE-2010-0928?s=debian&n=openssl&ns=debian&t=deb&osn=debian&osv=13&vr=%3E%3D3.2.1-3
+      Affected range : >=3.2.1-3 
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  diffutils 1:3.10-4
+pkg:deb/debian/diffutils@1%3A3.10-4?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2026-53910 — Debian
+      Advisory: CVE-2026-53910
+      https://scout.docker.com/v/CVE-2026-53910?s=debian&n=diffutils&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     1L  util-linux 2.41.5-0+deb13u1
+pkg:deb/debian/util-linux@2.41.5-0%2Bdeb13u1?arch=amd64&os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ LOW CVE-2022-0563 — Debian
+      Advisory: CVE-2022-0563
+      https://scout.docker.com/v/CVE-2022-0563?s=debian&n=util-linux&ns=debian&t=deb&osn=debian&osv=13&vr=%3E0
+      Affected range : >0        
+      Fixed version  : not fixed 
+    
+
+   0C     0H     0M     0L     1?  libzstd 1.5.7+dfsg-1
+pkg:deb/debian/libzstd@1.5.7%2Bdfsg-1?os_distro=trixie&os_name=debian&os_version=13
+
+    ✗ UNSPECIFIED CVE-2026-124851 — Debian
+      Advisory: CVE-2026-124851
+      https://scout.docker.com/v/CVE-2026-124851?s=debian&n=libzstd&ns=debian&t=deb&osn=debian&osv=13&vr=%3C1.5.7%2Bdfsg-1%2Bdeb13u1
+      Affected range : <1.5.7+dfsg-1+deb13u1 
+      Fixed version  : 1.5.7+dfsg-1+deb13u1  
+    
+
+
+38 vulnerabilities found in 16 packages
+  CRITICAL     0  
+  HIGH         6  
+  MEDIUM       3  
+  LOW          27 
+  UNSPECIFIED  2  
+
+
+What's next:
+    View base image update recommendations → docker scout recommendations diabetes-trainer:1.0.0
+

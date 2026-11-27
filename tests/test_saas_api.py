@@ -9,9 +9,25 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 from sqlalchemy.orm import sessionmaker
+
+
+def _ephemeral_ed25519_pems() -> tuple[str, str]:
+    priv = Ed25519PrivateKey.generate()
+    priv_pem = priv.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode("ascii")
+    pub_pem = priv.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("ascii")
+    return priv_pem, pub_pem
 
 from app.main import app as ml_app
 from saas_app import db as saas_db
@@ -35,12 +51,24 @@ def saas_env(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
     from saas_app import main as saas_main
     monkeypatch.setattr(saas_main, "SessionLocal", TestSessionLocal)
+    priv_pem, pub_pem = _ephemeral_ed25519_pems()
     monkeypatch.setattr(saas_settings, "SAAS_ENV", "test")
     monkeypatch.setattr(saas_settings, "COOKIE_SECURE", False)
+    monkeypatch.setattr(saas_settings, "JWT_PRIVATE_KEY_PEM", priv_pem)
+    monkeypatch.setattr(saas_settings, "JWT_PUBLIC_KEY_PEM", pub_pem)
+    monkeypatch.setattr(saas_settings, "IAM_PROVISION_TOKEN", "p" * 40)
+    monkeypatch.setattr(saas_settings, "DATABASE_URL", f"sqlite:///{db_file}")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
     saas_settings.validate_security_secrets()
     login_rate_limiter.reset()
 
-    saas_db.Base.metadata.create_all(bind=test_engine)
+    from alembic import command as alembic_command
+    from alembic.config import Config as AlembicConfig
+    from pathlib import Path
+
+    alembic_cfg = AlembicConfig(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_file}")
+    alembic_command.upgrade(alembic_cfg, "head")
     with TestSessionLocal() as session:
         device_keys = seed_database(
             session,
@@ -87,7 +115,8 @@ def _login_client(app, username: str, password: str) -> TestClient:
 def test_fail_fast_on_missing_secrets_in_production():
     cfg = SaasSettings()
     cfg.SAAS_ENV = "production"
-    cfg.JWT_SECRET_KEY = ""
+    cfg.SERVICE_MODE = "iam"
+    cfg.JWT_PRIVATE_KEY_PEM = ""
     with pytest.raises(RuntimeError):
         cfg.validate_security_secrets()
 
@@ -298,7 +327,7 @@ def test_timing_attack_mitigation_hashes_unknown_user(saas_env, monkeypatch: pyt
 
 
 def test_jwt_algorithm_and_inactive_user_rejected(saas_env):
-    """Token con algoritmo diverso da HS256 e utenti disattivati vengono rifiutati."""
+    """Token con algoritmo diverso da EdDSA (es. confusione HMAC con chiave pubblica) e utenti disattivati vengono rifiutati."""
     app, SessionLocal, _, _ = saas_env
 
     import jwt as pyjwt
@@ -309,12 +338,13 @@ def test_jwt_algorithm_and_inactive_user_rejected(saas_env):
         {
             "sub": "1",
             "jti": "forged-jti",
+            "username": "manager",
             "role": "manager",
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=10)).timestamp()),
         },
-        saas_settings.JWT_SECRET_KEY,
-        algorithm="HS512",
+        "symmetric-key-confusion-attempt-32chars",
+        algorithm="HS256",
     )
     forged_client = TestClient(app, cookies={saas_settings.COOKIE_NAME: forged})
     assert forged_client.get("/api/auth/me").status_code == 401

@@ -5,9 +5,9 @@
 #        Zero dataset clinici nell'immagine runtime (Decisione D1).
 
 # Base image fissata per digest (riproducibilità): l'output di
-#   docker buildx imagetools inspect python:3.11.11-slim
+#   docker buildx imagetools inspect python:3.14.10-slim
 # è archiviato in docs/audit_reports/base_images_digests.txt.
-FROM python:3.11.11-slim@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS builder
+FROM python:3.14.10-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b AS builder
 WORKDIR /build
 COPY requirements-saas.lock .
 # --require-hashes: pip installa un pacchetto solo se il suo sha256 coincide con quello
@@ -15,7 +15,7 @@ COPY requirements-saas.lock .
 # la versione di pip è quella dell'immagine base, già deterministica.
 RUN pip install --no-cache-dir --require-hashes --user -r requirements-saas.lock
 
-FROM python:3.11.11-slim@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS runner
+FROM python:3.14.10-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b AS runner
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/home/appuser/.local/bin:$PATH" \
@@ -29,9 +29,11 @@ RUN addgroup --system --gid 10001 appgroup && \
 
 COPY --from=builder --chown=appuser:appgroup /root/.local /home/appuser/.local
 # alembic.ini + saas_app (con migrations/) servono al Job di migrazione/seed.
+# model/model* fornisce i pesi baseline al Model Repository quando il PVC è vuoto.
 COPY --chown=appuser:appgroup alembic.ini /app/alembic.ini
 COPY --chown=appuser:appgroup common/ /app/common/
 COPY --chown=appuser:appgroup saas_app/ /app/saas_app/
+COPY --chown=appuser:appgroup model/model.onnx model/model.onnx.data model/model_metadata.json /app/baseline_model/
 
 RUN chown -R appuser:appgroup /app
 

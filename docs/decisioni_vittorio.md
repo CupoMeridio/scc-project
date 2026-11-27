@@ -19,7 +19,7 @@ Risposte alle domande della sezione 9 del report di Claude.
 - Documentare il ritiro del progetto nella relazione, citare Gateway API come percorso futuro.
 
 ## D4. Deploy su cluster acceso o destroy/recreate
-**Decisione: Destroy/recreate sempre.** Nessun dato da preservare in sviluppo. Semplificare `deploy_k8s.sh` rimuovendo la logica di preservazione segreti (patch_if_missing, lettura password da DATABASE_URL esistente).
+**Decisione: Destroy/recreate sempre.** Nessun dato da preservare in sviluppo. Entrambi gli script di deploy eliminano il cluster KinD esistente e lo ricreano; database, PVC, Secret e credenziali vengono rigenerati. Non si riutilizzano Secret o password PostgreSQL del cluster precedente.
 
 ## D5. Script Windows (.ps1)
 **Decisione: Sì, mantenere.** Il progetto deve essere testabile ed eseguibile ovunque. Entrambi `.sh` e `.ps1` restano.

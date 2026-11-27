@@ -1,0 +1,205 @@
+# FILE: k8s/clinical-deployment.yaml
+# RUOLO: Application Zone — Paziente e Diabetologo (ruolo DB: saas_clinical).
+#        Verifica JWT EdDSA in locale + revoca Redis RO (ACL); chiama IAM SOLO per
+#        provisioning 2-step pazienti tramite IAM_PROVISION_TOKEN su HTTPS interno (V1/Q2).
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diabetes-clinical-api
+  namespace: default
+  labels:
+    app: diabetes-clinical-api
+    zone: application
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: diabetes-clinical-api
+  template:
+    metadata:
+      labels:
+        app: diabetes-clinical-api
+        zone: application
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - diabetes-clinical-api
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: clinical-api
+          image: diabetes-saas-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - uvicorn
+            - saas_app.main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8001"
+            - --workers
+            - "2"
+            - --ssl-certfile
+            - /etc/internal-tls/tls.crt
+            - --ssl-keyfile
+            - /etc/internal-tls/tls.key
+          ports:
+            - containerPort: 8001
+              name: https
+          env:
+            - name: PORT
+              value: "8001"
+            - name: HOST
+              value: "0.0.0.0"
+            - name: SAAS_ENV
+              value: "production"
+            - name: SERVICE_MODE
+              value: "clinical"
+            - name: JWT_EXPIRE_MINUTES
+              value: "10"
+            - name: IAM_INTERNAL_URL
+              value: "https://diabetes-iam-service"
+            - name: IAM_CA_CERT_PATH
+              value: "/etc/internal-ca/ca.crt"
+            - name: ML_SERVICE_URL
+              value: "https://diabetes-forecasting-service"
+            - name: ML_CA_CERT_PATH
+              value: "/etc/internal-ca/ca.crt"
+            - name: REDIS_CA_CERT_PATH
+              value: "/etc/internal-ca/ca.crt"
+            - name: JWT_PUBLIC_KEY_PEM
+              valueFrom:
+                configMapKeyRef:
+                  name: iam-jwt-public
+                  key: JWT_PUBLIC_KEY_PEM
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clinical-secrets
+                  key: DATABASE_URL
+            - name: IAM_PROVISION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: clinical-secrets
+                  key: IAM_PROVISION_TOKEN
+            - name: REDIS_REVOCATION_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clinical-secrets
+                  key: REDIS_REVOCATION_URL
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: internal-tls
+              mountPath: /etc/internal-tls
+              readOnly: true
+            - name: internal-ca
+              mountPath: /etc/internal-ca
+              readOnly: true
+            - name: pg-ca
+              mountPath: /etc/pg-ca
+              readOnly: true
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "192Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+              scheme: HTTPS
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: 8001
+              scheme: HTTPS
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: internal-tls
+          secret:
+            secretName: clinical-internal-tls
+        - name: internal-ca
+          configMap:
+            name: internal-ca
+        - name: pg-ca
+          secret:
+            secretName: diabetes-pg-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-clinical-service
+  namespace: default
+  labels:
+    app: diabetes-clinical-api
+    zone: application
+spec:
+  type: ClusterIP
+  selector:
+    app: diabetes-clinical-api
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8001
+      protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: diabetes-clinical-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: diabetes-clinical-api

@@ -31,20 +31,28 @@
 > The Cloud infrastructure (multi-node KinD cluster, non-root multi-stage Dockerfile pinned by digest, Ingress NGINX with rate-limiting, Kubernetes security contexts, `wrk` SLA automated stress testing, and automated deployment & validation scripts ready for CI/CD integration) is **completely decoupled from model internals**.
 > Whether Option 1 is confirmed or Option 2 (Parkinson) or Option 3 (Alzheimer) is assigned, the **cloud infrastructure remains 100% identical**: replacing `model/model.onnx` and adjusting Pydantic schema validation for the new tabular features will serve the new medical domain immediately.
 
-### System Architecture: from Data to Response (Single-Center Multi-Role SaaS)
+### System Architecture: Zone Separation & Least Privilege (`attach/arch.pdf`)
 
 ```text
 Browser / Client (Patient, Diabetologist, Center Manager)
         ↓ Mandatory HTTPS (308 redirect from HTTP)
-Ingress NGINX (TLS, Rate Limiting, OWASP Headers)
-   ├── "/"               ──▶ Frontend (2 non-root NGINX replicas, classic HTML/CSS/JS + local Chart.js)
-   └── "/api/*"          ──▶ SaaS API (2 FastAPI replicas: IAM HttpOnly Cookie, RBAC, Atomic Audit)
-                               ├──▶ Redis Queue ──▶ Ingestion Worker (2 replicas) ──┐
-                               ├──▶ PostgreSQL HA (CloudNativePG Primary + Standby) ◀┘
-                               └──▶ ML Inference Service (internal ClusterIP, 3 ONNX replicas)
+Ingress NGINX (Gateway: TLS, Rate Limiting, Path-Based Routing)
+   ├── "/"                     ──▶ Frontend (2 non-root NGINX replicas, static HTML/CSS/JS + local Chart.js)
+   ├── "/api/auth/*"           ──▶ IAM Zone (`diabetes-iam-api`, 2 replicas, role `saas_iam`, Ed25519 signing)
+   ├── "/api/patient|doctor/*" ──▶ Clinical Zone (`diabetes-clinical-api`, 2 replicas, role `saas_clinical`)
+   │                                  ├──▶ Local EdDSA JWT verify + Redis `revocation_ro` (TLS)
+   │                                  └──▶ ML Inference (`diabetes-forecasting-service`, 3–6 replicas via HPA, HTTPS)
+   └── "/api/manager/*"        ──▶ Manager Zone (`diabetes-manager-api`, 2 replicas, role `saas_manager` on SQL Views)
+
+Internal Only (NOT exposed by Ingress):
+   ├── CGM Ingestion (`diabetes-ingest-service`, role `saas_ingest`) ──▶ Redis Queue (`rediss://`) ──▶ Worker (`saas_worker`) ──┐
+   ├── PostgreSQL HA (CNPG Primary + Standby, `verify-full` + X25519/HKDF-SHA256/AES-256-GCM Encrypted `pg_dump`)          ◀┘
+   └── Training Zone CronJob (`diabetes-model-trainer`, role `saas_trainer` on `v_training_cgm_series`)
+          └── Champion/Challenger Gate ──▶ Model Repository (`diabetes-model-repo`, PVC + SHA-256 + Ed25519 manifest)
+                                              └──▶ Fail-Closed Sync + Rolling Restart on `diabetes-forecasting-api`
 ```
 
-The **Ingress NGINX** gateway exposes only the web portal (`/`) and authenticated SaaS endpoints (`/api/*`) over mandatory HTTPS (`ssl-redirect: "true"` + `force-ssl-redirect: "true"`). The ML inference service (`diabetes-forecasting-service`, 3 replicas with `podAntiAffinity` and `PDB`) remains **strictly internal to the cluster**, protected by **`default-deny` + explicit allowlist NetworkPolicies**. CGM ingestion (`/api/cgm/ingest`) buffers events onto **Redis** (`202 Accepted`) and is processed idempotently by 2 **Ingestion Worker** replicas into **PostgreSQL HA (Primary + synchronous Standby via CloudNativePG, with daily `pg_dump` backups)**. The queue uses an in-flight list with explicit ack, retry and a dead-letter queue, so samples are not lost on worker crashes. Schema management uses **Alembic** migrations inside a dedicated **Kubernetes Job** (`k8s/seed-job.yaml`).
+The **Ingress NGINX** gateway exposes only the static portal (`/`) and separated API zones (`/api/auth/*`, `/api/patient/*`, `/api/doctor/*`, `/api/manager/*`) over mandatory HTTPS (`ssl-redirect: "true"` + `force-ssl-redirect: "true"`, `backend-protocol: HTTPS`). Clinical and Manager zones verify **EdDSA (Ed25519)** JWTs locally and check `jti`/`pwdv` revocation against read-only **Redis ACL** (`revocation_ro` over `rediss://`); the Manager zone has zero network or credential access to IAM. Each zone runs least-privilege **NetworkPolicies (`default-deny` + explicit allowlists)** and its own dedicated PostgreSQL role (`saas_iam`, `saas_clinical`, `saas_manager`, `saas_ingest`, `saas_worker`, `saas_trainer`): `saas_manager` reads only aggregated views (`v_manager_*`), and `saas_trainer` reads only pseudonymized series (`v_training_cgm_series` with SHA-256 + salt). The **Model Repository** serves Champion ONNX weights over PVC with SHA-256 + Ed25519 signature verification and **fail-closed** sync on the ML replicas (3–6 pods managed by Kubernetes `HorizontalPodAutoscaler` with `podAntiAffinity` and `PDB`). Daily `pg_dump` backups use asymmetric authenticated encryption (**X25519 + HKDF-SHA256 + AES-256-GCM**, private key kept strictly outside the cluster). See [Architecture Alignment Map](docs/mappa_architettura.md) for the full PDF correspondence table.
 
 ---
 
@@ -71,6 +79,7 @@ Ensure the host environment satisfies the following minimum prerequisites prior 
 * **Linux:** Bash shell, `make`, `git`, `curl`, and `sudo`. The `make setup` script uses APT and the Debian 13 (Trixie) repository; on Ubuntu, Fedora, and other distributions, install prerequisites with the appropriate package manager.
 * **macOS:** Homebrew, Bash, `make`, `git`, and `curl`. `make setup` installs Docker Desktop, KinD, kubectl, `wrk`, `jq`, and Python 3.
 * **Windows (10/11):** **Docker Desktop** running with WSL2 backend enabled, and **PowerShell**.
+* **For local Python environments:** Python **3.14** with `venv` support must be available (`python3.14` on Linux/macOS, `py -3.14` on Windows). Docker images already include Python 3.14.
 
 ---
 
@@ -124,17 +133,12 @@ make build
 make scan
 ```
 
-#### Step 6: Multi-Node KinD Kubernetes Cluster Initialization (Task F)
-Provisions the 3-node cluster topology (1 control-plane + 2 workers) and configures the NGINX Ingress Controller:
-```bash
-make cluster-up
-```
-
-#### Step 7: Application Deployment to Cluster (Task H)
-Loads the locally built container image into KinD nodes and executes the 3-replica rolling deployment:
+#### Step 6: Complete deployment from a clean cluster (Tasks F + H)
+The command builds the images, **deletes any existing KinD cluster and all its data** (database, PVCs, Secrets), then creates a fresh 3-node cluster, installs NGINX Ingress, and deploys the application:
 ```bash
 make deploy
 ```
+`make cluster-up` remains available to demonstrate Task F separately; do not run it before `make deploy`, because deployment recreates the cluster.
 
 #### Step 8: Endpoint Verification & HTTPS Web Portal
 Verify public HTTPS endpoints, HTTP->HTTPS redirect, and internal ML isolation via CLI:
@@ -153,13 +157,10 @@ make simulate-cgm
 ```
 `/api/cgm/ingest` is an internal endpoint (D2): it is **not** reachable through the Ingress, so ingestion must go through a port-forward and requires a per-device key sent as the `X-Device-Key` header. The key is stored in the `device-keys` Secret created by the seed Job (one entry per patient, decision N1/Q3):
 ```bash
-# In one terminal, forward the SaaS service:
-kubectl port-forward svc/diabetes-saas-service 8080:80
+# In one terminal, forward the Ingest service:
+kubectl port-forward svc/diabetes-ingest-service 8080:80
 # In another terminal, ingest using the patient's device key:
 make simulate-cgm-ingest PATIENT=591
-# Or manually:
-python scripts/simulate_cgm_patient.py --ingest --endpoint http://127.0.0.1:8080/predict --patient 591 \
-  --device-key "$(kubectl get secret device-keys -o jsonpath='{.data.patient_591}' | base64 -d)"
 ```
 On Windows, `scripts/simulate_cgm_ingest.ps1` performs the same flow (reads the key from the Secret, opens the port-forward, runs the simulator).
 
@@ -204,7 +205,7 @@ make test
 ```
 
 #### Step 3: Build and deploy
-Use the same Make commands as the Linux workflow to build, deploy to KinD, and run the stress test:
+Use the same Make commands as the Linux workflow to build, deploy from a clean KinD cluster, and run the stress test:
 ```bash
 make build
 make scan
@@ -234,11 +235,13 @@ Configure the virtual environment via automated detection:
 docker build -t diabetes-api:1.0.0 -f docker/Dockerfile .
 docker build -t diabetes-saas-api:1.0.0 -f docker/Dockerfile.saas .
 docker build -t diabetes-frontend:1.0.0 -f docker/Dockerfile.frontend .
+docker build -t diabetes-trainer:1.0.0 -f docker/Dockerfile.trainer .
 docker scout quickview diabetes-api:1.0.0
 docker scout cves diabetes-api:1.0.0
 ```
 
 #### Step 4: Automated Deployment to KinD Cluster
+**Warning:** the script deletes any existing KinD cluster and all its data before recreating it.
 ```powershell
 .\scripts\deploy_k8s.ps1
 ```
@@ -289,7 +292,7 @@ The official assignment specifies operational availability windows based on proj
 | Security Control | Threat Model & Rationale | Implementation Mechanism |
 | :--- | :--- | :--- |
 | **Non-Root Container** | Prevents container breakout and privilege escalation onto the host kernel. | `USER 10001:10001` (`101` for NGINX unprivileged), `runAsNonRoot: true`, `readOnlyRootFilesystem: true`. |
-| **Multi-Stage Build** | Minimizes attack surface; compilers and build toolchains are purged from final image. | Two-stage Dockerfile (`builder` -> `runner`), base image pinned by digest (`python:3.11.11-slim@sha256:081075da…`). |
+| **Multi-Stage Build** | Minimizes attack surface; compilers and build toolchains are purged from final image. | Two-stage Dockerfile (`builder` -> `runner`), base image pinned by digest (`python:3.14.10-slim@sha256:22eafb37…`). |
 | **Docker Scout CVE Scanning** | Identifies Common Vulnerabilities and Exposures in OS and Python libraries prior to deployment. | `docker scout cves` & `docker scout quickview` (saved in `docs/audit_reports/`). |
 | **Rate Limiting** | Prevents Denial of Service (DoS) and ensures fair resource distribution under high concurrency. | `nginx.ingress.kubernetes.io/limit-rps: "1000"`, `limit-burst-multiplier: "5"`. |
 | **Connection Limiting** | Mitigates Slowloris attacks and socket table exhaustion on the ingress gateway. | `nginx.ingress.kubernetes.io/limit-connections: "150"`. |
@@ -334,13 +337,13 @@ scc-project/
 ├── requirements-test.txt    # Automated testing dependencies (pytest, httpx)
 ├── common/
 │   └── __init__.py          # Shared clinical thresholds (CLASS_BINS, classify_glucose)
-├── app/                     # Internal ONNX inference microservice
-├── saas_app/                # SaaS IAM/RBAC backend (services, repositories, atomic audit, seed_cli)
+├── app/                     # Internal fail-closed ONNX inference microservice (`MODEL_REPO_URL` sync)
+├── saas_app/                # Isolated zone services (`SERVICE_MODE=iam|clinical|manager|ingest`), `iam_client`, `model_repo`, Worker & Alembic seed
 ├── frontend/                # Classic HTML/CSS/JS portal + local Chart.js + non-root NGINX
-├── model/                   # Offline LSTM training, metadata & ONNX artifacts
-├── docker/                  # Non-root multi-stage Dockerfiles (ML, SaaS API+Worker+Seed, Frontend)
-├── k8s/                     # KinD config, CloudNativePG HA, Redis, Worker, Seed Job, Deployments (:1.0.0), PDBs, default-deny NetworkPolicies, Ingress
-├── tests/                   # Automated tests (test_api.py + test_saas_api.py)
+├── model/                   # Offline LSTM training, Champion/Challenger `retrain_pipeline.py`, metadata & ONNX artifacts
+├── docker/                  # Non-root multi-stage Dockerfiles (`ML`, `SaaS/Repo/Worker/Seed`, `Frontend`, `Trainer`)
+├── k8s/                     # KinD config, CNPG HA, encrypted `pg_dump` CronJob, Redis, Model Repo PVC, Training CronJob, 4 isolated SaaS Deployments, HPA (3–6), PDBs, zone NetworkPolicies, Ingress
+├── tests/                   # Automated tests (`test_api.py`, `test_saas_api.py`, `test_zone_architecture.py`, `test_simulate_cgm_ingest.py`)
 ├── docs/audit_reports/      # Raw, unedited audit evidence: image digests, Scout/wrk outputs (D8)
 └── scripts/                 # Host provisioning, KinD deployment, CGM replay & internal wrk SLA benchmark
 ```
@@ -357,8 +360,8 @@ On macOS, the CPU profiles are available; `auto` selects `cpu-train`. CUDA and R
 | Profile | Installed Packages | Disk Size | Target Hardware & Use Case |
 | :--- | :--- | :--- | :--- |
 | **`cpu-minimal`** | FastAPI, ONNX Runtime, Pydantic, uvicorn, onnx, pytest, httpx. **Zero PyTorch**. | **~100 MB** | Lightweight API validation, Docker builds, health probe tests, and Kubernetes serving. |
-| **`cpu-train`**<br>*(Recommended)* | Everything in `cpu-minimal` + PyTorch (CPU wheel on Linux, standard distribution on macOS) + scikit-learn + pandas. | **~350 MB** | **Default project profile**: CPU training on Linux and macOS. |
-| **`gpu-cuda`** | Everything in `cpu-minimal` + **Full PyTorch with NVIDIA CUDA 12.4** + torchvision + torchaudio. | **~2.5 GB** | Dedicated environments on systems equipped with an **NVIDIA** GPU. |
+| **`cpu-train`**<br>*(Recommended)* | Everything in `cpu-minimal` + PyTorch CPU, ONNX, NumPy, and pandas. | Varies | **Default project profile**: CPU training on Linux and macOS. |
+| **`gpu-cuda`** | Everything in `cpu-minimal` + **PyTorch with NVIDIA CUDA 13.0**. | Large | Dedicated environments on compatible systems equipped with an **NVIDIA** GPU. |
 | **`gpu-rocm`** | On Linux: PyTorch with ROCm as supported by the setup script. On Windows: currently installs PyTorch CPU, not ROCm. | Varies | Use ROCm acceleration only on explicitly supported platforms; detecting an AMD GPU on Windows does not enable acceleration. |
 | **`auto`** | Automatically detects GPU hardware on Linux; selects `cpu-train` on macOS. | Dynamic | **Platform-aware profile selection**. |
 

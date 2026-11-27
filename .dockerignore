@@ -19,6 +19,5 @@ k8s/
 tests/
 # Decisione D1: il dataset non entra nell'immagine, viene montato come volume sul Job di seed.
 Diabetes/
-model/train_lstm.py
 model/*.pt
 .pytest_cache/

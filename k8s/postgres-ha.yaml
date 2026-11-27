@@ -1,5 +1,7 @@
 # FILE: k8s/postgres-ha.yaml
 # RUOLO: Data Zone HA — Cluster PostgreSQL 16 replicato (1 Primary + 1 Standby con failover automatico) via CloudNativePG.
+#        I 6 ruoli applicativi minimi sono gestiti dichiarativamente con `managed.roles`:
+#        saas_migrator NON possiede CREATEROLE (V8).
 
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -14,8 +16,6 @@ spec:
   primaryUpdateStrategy: unsupervised
   stopDelay: 15
   switchoverDelay: 15
-  # Replica sincronica: il primary attende ilack della standby prima di
-  # confermare la commit, evitando la perdita di transazioni cliniche in failover.
   minSyncReplicas: 1
   maxSyncReplicas: 1
   bootstrap:
@@ -24,9 +24,38 @@ spec:
       owner: saas_migrator
       secret:
         name: saas-pg-auth
-      # saas_migrator non è superuser, ma gli serve CREATEROLE per creare/ruotare saas_app in 001_initial_schema.
-      postInitSQL:
-        - ALTER ROLE saas_migrator WITH CREATEROLE;
+  managed:
+    roles:
+      - name: saas_iam
+        login: true
+        ensure: present
+        passwordSecret:
+          name: pg-role-iam
+      - name: saas_clinical
+        login: true
+        ensure: present
+        passwordSecret:
+          name: pg-role-clinical
+      - name: saas_manager
+        login: true
+        ensure: present
+        passwordSecret:
+          name: pg-role-manager
+      - name: saas_ingest
+        login: true
+        ensure: present
+        passwordSecret:
+          name: pg-role-ingest
+      - name: saas_worker
+        login: true
+        ensure: present
+        passwordSecret:
+          name: pg-role-worker
+      - name: saas_trainer
+        login: true
+        ensure: present
+        passwordSecret:
+          name: pg-role-trainer
   storage:
     size: 1Gi
   affinity:
@@ -34,8 +63,8 @@ spec:
     topologyKey: kubernetes.io/hostname
   resources:
     requests:
-      cpu: "100m"
+      cpu: "200m"
       memory: "256Mi"
     limits:
-      cpu: "500m"
-      memory: "512Mi"
+      cpu: "1500m"
+      memory: "768Mi"

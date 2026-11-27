@@ -23,9 +23,12 @@ import json   # Lettura del file dei metadati del modello
 import time   # Misurazione del tempo di elaborazione della richiesta per calcolare la latenza
 import uuid   # Generazione di identificativi casuali univoci a 128 bit (UUID4) per il tracciamento
 import math   # Funzioni matematiche per verifica anti-NaN e anti-Inf
+import shutil # Copia/pulizia sicura della cache modello
+import ssl    # Contesto TLS verificato verso Model Repository interno (Q2)
 import hashlib # Modulo crittografico per verifica dell'integrità SHA-256 degli artefatti
 import logging # Modulo standard per generare log strutturati con timestamp e severità
 import threading # Gestione concorrenza thread-safe per Service Monitoring e telemetria
+import urllib.request # Download interno dal Model Repository senza dipendenze aggiuntive
 from contextlib import asynccontextmanager # Decoratore per definire il gestore asincrono del ciclo di vita (lifespan)
 from typing import Dict, Any, Tuple, Optional
 
@@ -33,6 +36,7 @@ import numpy as np # Manipolazione efficiente dei tensori numerici
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse # Risposta HTTP specializzata per payload JSON personalizzati
 
+from common.model_signing import verify_manifest_ed25519
 # Importazione delle configurazioni e degli schemi validati
 from app.config import settings
 from app.schemas import (
@@ -57,6 +61,9 @@ logger = logging.getLogger("diabetes-api")
 onnx_session = None       # Oggetto InferenceSession di ONNX Runtime
 model_metadata: Dict[str, Any] = {} # Metadati di versione e parametri di audit
 scaler_params: Dict[str, Any] = {}  # Medie e deviazioni standard per standardizzare le feature
+_init_lock = threading.Lock()
+_last_repo_attempt = 0.0
+_REPO_ALLOWED_FILES = frozenset({"model.onnx", "model.onnx.data", "model_metadata.json"})
 
 
 def compute_file_sha256(filepath: str) -> str:
@@ -110,6 +117,13 @@ def verify_artifacts_integrity(metadata: Dict[str, Any]) -> bool:
             return False
 
     logger.info(f"[✓] Integrità crittografica SHA-256 verificata con successo per tutti gli artefatti.")
+
+    if settings.MODEL_SIGNING_PUBLIC_KEY_PEM:
+        if not verify_manifest_ed25519(metadata, settings.MODEL_SIGNING_PUBLIC_KEY_PEM):
+            logger.critical("[FAIL-CLOSED] Firma Ed25519 del manifest model_metadata.json assente o non valida!")
+            return False
+        logger.info("[✓] Firma asimmetrica Ed25519 del manifest verificata.")
+
     return True
 
 
@@ -163,6 +177,97 @@ def load_model_metadata() -> bool:
     return True
 
 
+def _sync_model_from_repository() -> bool:
+    """
+    Scarica la versione Champion attiva dal Model Repository interno (`MODEL_REPO_URL`).
+    Comportamento fail-closed puro: se il repository non è raggiungibile o il manifest
+    è invalido, non ricorre mai a copie non verificate.
+    """
+    repo_url = settings.MODEL_REPO_URL.strip().rstrip("/")
+    if not repo_url:
+        return True
+    if not repo_url.startswith(("http://", "https://")):
+        logger.error("[FAIL-CLOSED] MODEL_REPO_URL non valido: %s", repo_url)
+        return False
+
+    cache_dir = settings.MODEL_CACHE_DIR
+    staging_dir = cache_dir + ".staging"
+    ssl_ctx = ssl.create_default_context(cafile=settings.MODEL_CA_CERT_PATH) if settings.MODEL_CA_CERT_PATH else None
+    try:
+        manifest_url = f"{repo_url}/models/current/manifest"
+        req = urllib.request.Request(manifest_url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, context=ssl_ctx, timeout=5.0) as resp:  # nosec B310 - URL interna validata http(s)
+            manifest = json.loads(resp.read().decode("utf-8"))
+
+        files = [f for f in manifest.get("files", []) if f in _REPO_ALLOWED_FILES]
+        if "model.onnx" not in files or "model_metadata.json" not in files:
+            logger.error("[FAIL-CLOSED] Manifest repository incompleto: %s", files)
+            return False
+
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        os.makedirs(staging_dir, exist_ok=True)
+        for fname in files:
+            art_url = f"{repo_url}/models/current/{fname}"
+            art_req = urllib.request.Request(art_url)
+            with urllib.request.urlopen(art_req, context=ssl_ctx, timeout=10.0) as art_resp:  # nosec B310
+                data = art_resp.read()
+            with open(os.path.join(staging_dir, fname), "wb") as handle:
+                handle.write(data)
+
+        shutil.rmtree(cache_dir, ignore_errors=True)
+        os.replace(staging_dir, cache_dir)
+        settings.MODEL_PATH = os.path.join(cache_dir, "model.onnx")
+        settings.METADATA_PATH = os.path.join(cache_dir, "model_metadata.json")
+        logger.info(
+            "[✓] Artefatti modello sincronizzati dal Model Repository (versione %s).",
+            manifest.get("model_version", "unknown"),
+        )
+        return True
+    except Exception as exc:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        logger.error("[FAIL-CLOSED] Sync dal Model Repository fallita (%s): %s", repo_url, exc)
+        return False
+
+
+def initialize_model_state() -> bool:
+    """Inizializza metadati, integrità SHA-256 e sessione ONNX Runtime in modo thread-safe."""
+    global onnx_session, _last_repo_attempt
+    with _init_lock:
+        _last_repo_attempt = time.monotonic()
+        if settings.MODEL_REPO_URL and not _sync_model_from_repository():
+            onnx_session = None
+            return False
+
+        metadata_ok = load_model_metadata()
+        if not metadata_ok:
+            logger.error("[FAIL-CLOSED] Avvio interrotto: metadati o integrità modello non validi. Servizio NON pronto.")
+            onnx_session = None
+            return False
+
+        logger.info(f"Ricerca modello ONNX compilato in: {settings.MODEL_PATH}")
+        try:
+            import onnxruntime as ort  # Motore di inferenza C++ ad altissime prestazioni
+
+            so = ort.SessionOptions()
+            so.intra_op_num_threads = 1
+            so.inter_op_num_threads = 1
+            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+            onnx_session = ort.InferenceSession(
+                settings.MODEL_PATH,
+                sess_options=so,
+                providers=["CPUExecutionProvider"],
+            )
+            input_names = [inp.name for inp in onnx_session.get_inputs()]
+            output_names = [out.name for out in onnx_session.get_outputs()]
+            logger.info(f"[✓] Modello ONNX reale caricato con successo! Ingressi={input_names}, Uscite={output_names}")
+            return True
+        except Exception as e:
+            logger.error(f"[X] Errore critico nel caricamento di ONNX Runtime: {e}")
+            onnx_session = None
+            return False
+
+
 # -----------------------------------------------------------------------------
 # GESTORE DEL CICLO DI VITA DELL'APPLICAZIONE (Lifespan Event)
 # -----------------------------------------------------------------------------
@@ -173,32 +278,7 @@ async def lifespan(app: FastAPI):
     Inizializza ONNX Runtime solo se i metadati e l'integrità sono stati validati al 100%.
     """
     global onnx_session
-    metadata_ok = load_model_metadata()
-
-    if not metadata_ok:
-        logger.error("[FAIL-CLOSED] Avvio interrotto: metadati o integrità modello non validi. Servizio NON pronto.")
-        onnx_session = None
-    else:
-        logger.info(f"Ricerca modello ONNX compilato in: {settings.MODEL_PATH}")
-        try:
-            import onnxruntime as ort # Motore di inferenza C++ ad altissime prestazioni
-
-            so = ort.SessionOptions()
-            so.intra_op_num_threads = 1
-            so.inter_op_num_threads = 1
-            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-
-            onnx_session = ort.InferenceSession(
-                settings.MODEL_PATH,
-                sess_options=so,
-                providers=['CPUExecutionProvider']
-            )
-            input_names = [inp.name for inp in onnx_session.get_inputs()]
-            output_names = [out.name for out in onnx_session.get_outputs()]
-            logger.info(f"[✓] Modello ONNX reale caricato con successo! Ingressi={input_names}, Uscite={output_names}")
-        except Exception as e:
-            logger.error(f"[X] Errore critico nel caricamento di ONNX Runtime: {e}")
-            onnx_session = None
+    initialize_model_state()
 
     yield
 
@@ -341,7 +421,13 @@ def ready():
     """
     Readiness Probe per Kubernetes: garantisce che nessun traffico venga instradato
     se il modello ONNX o i parametri di normalizzazione (scaler) non sono perfettamente caricati.
+    Se MODEL_REPO_URL è configurato e il pod è ancora in attesa al boot, ritenta la
+    sincronizzazione ogni 3 secondi restando rigorosamente fail-closed (503) in caso di errore.
     """
+    if (onnx_session is None or not scaler_params) and settings.MODEL_REPO_URL:
+        if (time.monotonic() - _last_repo_attempt) >= 3.0:
+            initialize_model_state()
+
     if onnx_session is None or not scaler_params:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

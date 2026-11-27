@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from saas_app.auth import generate_device_key, hash_device_key, hash_password
 from saas_app.clinical import map_prediction_to_outcome
 from saas_app.config import saas_settings
-from saas_app.models import CgmReading, Device, Intervention, MealPrediction, Patient, User
+from saas_app.models import CgmReading, Device, DoctorProfile, Intervention, MealPrediction, Patient, User
 
 logger = logging.getLogger("saas-api.seed")
 
@@ -92,34 +92,35 @@ def _seed_database_locked(
     if not patient_pw or not doctor_pw or not manager_pw:
         raise ValueError("Il seed demo richiede password esplicite per pazienti, medici e manager.")
 
-    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    raw_now = datetime.now(timezone.utc)
+    now = raw_now.replace(minute=(raw_now.minute // 5) * 5, second=0, microsecond=0)
     patient_pw_hash = hash_password(patient_pw)
     doctor_pw_hash = hash_password(doctor_pw)
     manager_pw_hash = hash_password(manager_pw)
 
-    # 1. Center Manager e 2 Diabetologi
+    # 1. Center Manager e 2 Diabetologi (IAM senza PII clinica; anagrafica medici in doctor_profiles)
     manager = User(
         username="manager",
-        email="manager@diabetes-saas.local",
-        full_name="Ing. Laura Valeri (Center Manager)",
         password_hash=manager_pw_hash,
         role="manager",
     )
     doc_0 = User(
         username="dr.rossi",
-        email="rossi@diabetes-saas.local",
-        full_name="Dr. Paolo Rossi",
         password_hash=doctor_pw_hash,
         role="doctor",
     )
     doc_1 = User(
         username="dr.bianchi",
-        email="bianchi@diabetes-saas.local",
-        full_name="Dr.ssa Marta Bianchi",
         password_hash=doctor_pw_hash,
         role="doctor",
     )
     db.add_all([manager, doc_0, doc_1])
+    db.flush()
+
+    db.add_all([
+        DoctorProfile(user_id=doc_0.id, full_name="Dr. Paolo Rossi", email="rossi@diabetes-saas.local"),
+        DoctorProfile(user_id=doc_1.id, full_name="Dr.ssa Marta Bianchi", email="bianchi@diabetes-saas.local"),
+    ])
     db.flush()
 
     doctors = [doc_0, doc_1]
@@ -141,8 +142,6 @@ def _seed_database_locked(
     for idx, (code, full_name, doc_idx, diet_limit) in enumerate(DEMO_PATIENTS):
         p_user = User(
             username=f"patient_{code}",
-            email=f"patient_{code}@diabetes-saas.local",
-            full_name=full_name,
             password_hash=patient_pw_hash,
             role="patient",
             must_change_password=True,  # password iniziale assegnata dal medico: da cambiare al primo accesso
@@ -154,6 +153,8 @@ def _seed_database_locked(
             user_id=p_user.id,
             doctor_id=doctors[doc_idx].id,
             patient_code=code,
+            full_name=full_name,
+            email=f"patient_{code}@diabetes-saas.local",
             diet_carb_limit_g=diet_limit,
             target_min_mmol=3.9,
             target_max_mmol=10.0,

@@ -1,0 +1,147 @@
+# FILE: k8s/model-repo.yaml
+# RUOLO: Data Zone — Model Repository interno con TLS interno e verifica firma Ed25519 (V4/Q2).
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-repo-pvc
+  namespace: default
+  labels:
+    app: diabetes-model-repo
+    zone: data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diabetes-model-repo
+  namespace: default
+  labels:
+    app: diabetes-model-repo
+    zone: data
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: diabetes-model-repo
+  template:
+    metadata:
+      labels:
+        app: diabetes-model-repo
+        zone: data
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: model-repo
+          image: diabetes-saas-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - uvicorn
+            - saas_app.model_repo:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8002"
+            - --workers
+            - "1"
+            - --ssl-certfile
+            - /etc/internal-tls/tls.crt
+            - --ssl-keyfile
+            - /etc/internal-tls/tls.key
+          ports:
+            - containerPort: 8002
+              name: https
+          env:
+            - name: SAAS_ENV
+              value: "production"
+            - name: MODEL_REPO_DIR
+              value: "/var/lib/model-repo"
+            - name: BASELINE_MODEL_DIR
+              value: "/app/baseline_model"
+            - name: MODEL_REPO_UPLOAD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: training-secrets
+                  key: MODEL_REPO_UPLOAD_TOKEN
+            - name: MODEL_SIGNING_PUBLIC_KEY_PEM
+              valueFrom:
+                configMapKeyRef:
+                  name: model-signing-public
+                  key: MODEL_SIGNING_PUBLIC_KEY_PEM
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: repo-data
+              mountPath: /var/lib/model-repo
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: internal-tls
+              mountPath: /etc/internal-tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "96Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8002
+              scheme: HTTPS
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: repo-data
+          persistentVolumeClaim:
+            claimName: model-repo-pvc
+        - name: tmp-volume
+          emptyDir: {}
+        - name: internal-tls
+          secret:
+            secretName: model-repo-internal-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-model-repo
+  namespace: default
+  labels:
+    app: diabetes-model-repo
+    zone: data
+spec:
+  type: ClusterIP
+  selector:
+    app: diabetes-model-repo
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8002
+      protocol: TCP

@@ -40,6 +40,20 @@ def decode_envelope(raw: str) -> Tuple[Event, int]:
     return obj["event"], attempt
 
 
+def _redis_conn_kwargs(connect_timeout: float, socket_timeout: float) -> dict:
+    kwargs: dict = {
+        "decode_responses": True,
+        "socket_connect_timeout": connect_timeout,
+        "socket_timeout": socket_timeout,
+        "retry_on_timeout": True,
+        "health_check_interval": 30,
+    }
+    if saas_settings.REDIS_CA_CERT_PATH:
+        kwargs["ssl_ca_certs"] = saas_settings.REDIS_CA_CERT_PATH
+        kwargs["ssl_cert_reqs"] = "required"
+    return kwargs
+
+
 def get_sync_redis() -> Optional[redis.Redis]:
     """Client condiviso per l'API: usato da endpoint `def`, quindi in thread pool."""
     global _sync_redis
@@ -48,11 +62,7 @@ def get_sync_redis() -> Optional[redis.Redis]:
     if _sync_redis is None:
         _sync_redis = redis.from_url(
             saas_settings.REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=1.5,
-            socket_timeout=2.0,
-            retry_on_timeout=True,
-            health_check_interval=30,
+            **_redis_conn_kwargs(1.5, 2.0),
         )
     return _sync_redis
 
@@ -76,11 +86,7 @@ def build_sync_redis() -> redis.Redis:
         raise RuntimeError("REDIS_URL obbligatorio per l'Ingestion Worker.")
     return redis.from_url(
         saas_settings.REDIS_URL,
-        decode_responses=True,
-        socket_connect_timeout=3.0,
-        socket_timeout=8.0,
-        retry_on_timeout=True,
-        health_check_interval=30,
+        **_redis_conn_kwargs(3.0, 8.0),
     )
 
 

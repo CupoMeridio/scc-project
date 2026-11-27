@@ -27,14 +27,14 @@ $portForward = $null
 $inCluster = ($TargetHost -eq "internal")
 $cmName = "wrk-lua-bench"
 $podName = "wrk-bench"
-$wrkUrl = if ($inCluster) { "http://diabetes-forecasting-service/predict" } else { "$TargetHost/predict" }
-$preflightUrl = if ($inCluster) { "http://127.0.0.1:18000/predict" } else { "$TargetHost/predict" }
+$wrkUrl = if ($inCluster) { "https://diabetes-forecasting-service/predict" } else { "$TargetHost/predict" }
+$preflightUrl = if ($inCluster) { "https://127.0.0.1:18000/predict" } else { "$TargetHost/predict" }
 
 try {
     if ($inCluster) {
-        Write-Host "[+] Pre-flight tramite port-forward temporaneo su svc/diabetes-forecasting-service (18000 -> 80)..." -ForegroundColor Yellow
+        Write-Host "[+] Pre-flight tramite port-forward temporaneo su svc/diabetes-forecasting-service (18000 -> 443 TLS)..." -ForegroundColor Yellow
         $portForward = Start-Process -FilePath "kubectl" `
-            -ArgumentList "port-forward", "svc/diabetes-forecasting-service", "18000:80" `
+            -ArgumentList "port-forward", "svc/diabetes-forecasting-service", "18000:443" `
             -PassThru -NoNewWindow
         Start-Sleep -Seconds 2
     }
@@ -91,7 +91,7 @@ try {
         kubectl create configmap $cmName "--from-file=test_predict.lua=$LuaScript" --dry-run=client -o yaml | kubectl apply -f - | Out-Null
         kubectl delete pod $podName --ignore-not-found | Out-Null
         $overrides = "{`"spec`":{`"containers`":[{`"name`":`"$podName`",`"image`":`"williamyeh/wrk`",`"args`":[`"-t$Threads`",`"-c$Connections`",`"-d$Duration`",`"-s`",`"/scripts/test_predict.lua`",`"--latency`",`"$wrkUrl`"],`"volumeMounts`":[{`"name`":`"lua`",`"mountPath`":`"/scripts`"}]}],`"volumes`":[{`"name`":`"lua`",`"configMap`":{`"name`":`"$cmName`"}}]}}"
-        $wrkOutput = kubectl run $podName --rm -i --restart=Never --image=williamyeh/wrk --labels="app=diabetes-saas-api" "--overrides=$overrides"
+        $wrkOutput = kubectl run $podName --rm -i --restart=Never --image=williamyeh/wrk --labels="app=diabetes-clinical-api" "--overrides=$overrides"
     } else {
         $wrkOutput = docker run --rm `
             -v "${ProjectRoot}/scripts:/scripts" `

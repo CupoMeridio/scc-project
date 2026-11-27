@@ -1,0 +1,36 @@
+=== PostgreSQL Least-Privilege Roles & Append-Only Trigger Report (V3) ===
+Date (UTC): 2026-11-27T20:24:42+00:00
+Command: ./scripts/verify_db_roles.sh
+NAME          AGE     INSTANCES   READY   STATUS                     PRIMARY
+diabetes-pg   9m45s   2           2       Cluster in healthy state   diabetes-pg-1
+[OK]   ALLOW saas_manager: SELECT total_patients, total_doctors FROM v_manager_overview; -> 12|2
+[OK]   DENY  saas_manager: SELECT count(*) FROM users; (ERROR:  permission denied for table users)
+[OK]   DENY  saas_manager: SELECT count(*) FROM patients; (ERROR:  permission denied for table patients)
+[OK]   DENY  saas_manager: SELECT count(*) FROM cgm_readings; (ERROR:  permission denied for table cgm_readings)
+[OK]   DENY  saas_manager: SELECT actor_username, detail_json FROM audit_logs; (ERROR:  column "actor_username" does not exist)
+[OK]   DENY  saas_manager: SELECT count(*) FROM v_training_cgm_series; (ERROR:  permission denied for view v_training_cgm_series)
+[OK]   ALLOW saas_clinical: SELECT count(*) FROM patients; -> 12
+[OK]   ALLOW saas_clinical: SELECT count(*) FROM doctor_profiles; -> 2
+[OK]   DENY  saas_clinical: SELECT count(*) FROM users; (ERROR:  permission denied for table users)
+[OK]   DENY  saas_clinical: SELECT count(*) FROM revoked_tokens; (ERROR:  permission denied for table revoked_tokens)
+[OK]   DENY  saas_clinical: SELECT count(*) FROM devices; (ERROR:  permission denied for table devices)
+[OK]   ALLOW saas_iam: SELECT count(*) FROM users; -> 15
+[OK]   ALLOW saas_iam: SELECT count(patient_code) FROM patients; -> 12
+[OK]   DENY  saas_iam: SELECT full_name FROM patients LIMIT 1; (ERROR:  permission denied for table patients)
+[OK]   DENY  saas_iam: SELECT email FROM patients LIMIT 1; (ERROR:  permission denied for table patients)
+[OK]   DENY  saas_iam: SELECT count(*) FROM cgm_readings; (ERROR:  permission denied for table cgm_readings)
+[OK]   ALLOW saas_ingest: SELECT count(*) FROM devices; -> 12
+[OK]   DENY  saas_ingest: SELECT count(*) FROM users; (ERROR:  permission denied for table users)
+[OK]   DENY  saas_ingest: SELECT count(*) FROM cgm_readings; (ERROR:  permission denied for table cgm_readings)
+[OK]   ALLOW saas_worker: SELECT count(*) FROM cgm_readings; -> 1728
+[OK]   DENY  saas_worker: SELECT count(*) FROM users; (ERROR:  permission denied for table users)
+[OK]   DENY  saas_worker: SELECT count(*) FROM devices; (ERROR:  permission denied for table devices)
+[OK]   ALLOW saas_trainer: SELECT count(*) FROM v_training_cgm_series; -> 1728
+[OK]   DENY  saas_trainer: SELECT count(*) FROM users; (ERROR:  permission denied for table users)
+[OK]   DENY  saas_trainer: SELECT count(*) FROM patients; (ERROR:  permission denied for table patients)
+[OK]   DENY  saas_clinical: UPDATE audit_logs SET action='TAMPER'; (ERROR:  permission denied for table audit_logs)
+[OK]   DENY  saas_clinical: DELETE FROM audit_logs; (ERROR:  permission denied for table audit_logs)
+[OK]   DENY  saas_clinical: TRUNCATE TABLE audit_logs; (ERROR:  permission denied for table audit_logs)
+[OK]   DENY  saas_clinical: DROP TRIGGER audit_log_no_modification ON audit_logs; (ERROR:  must be owner of relation audit_logs)
+[OK]   DENY  saas_migrator: DELETE FROM audit_logs; (ERROR:  audit_logs è append-only: UPDATE, DELETE e TRUNCATE non consentiti)
+[✓] Tutti i controlli sui 6 ruoli DB e sul trigger append-only sono passati. Report: docs/audit_reports/db_roles_20261127-202442Z.txt

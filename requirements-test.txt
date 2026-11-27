@@ -1,3 +1,4 @@
-# Testing dependencies for API validation
-pytest>=8.0.0
-httpx>=0.27.0
+# Testing dependencies for API validation and the current Starlette TestClient.
+pytest>=9.2.0
+httpx2>=2.16.2
+onnx>=1.23.2

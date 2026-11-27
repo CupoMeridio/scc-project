@@ -1,6 +1,6 @@
 # FILE: k8s/redis.yaml
-# RUOLO: Coda asincrona Redis per buffering dei campioni CGM (DMZ Queue).
-# L'AOF risiede su PVC: i campioni in attesa sopravvivono al restart del pod.
+# RUOLO: Coda asincrona Redis 7.4 con TLS interno obbligatorio (`port 0`, `tls-port 6379`)
+#        e ACL separata: utente `revocation_ro` in sola lettura sui soli prefissi `revoked:*` (V1/Q2).
 
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -44,25 +44,41 @@ spec:
       containers:
         - name: redis
           image: redis:7.4-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
-          # La password non finisce nella command line del processo: viene scritta
-          # in un file 0600 dentro il PVC. noeviction trasforma la pressione
-          # memoria in backpressure (503 al client) invece di droppare la coda.
           command:
             - sh
             - -c
             - |
               umask 077
-              printf 'requirepass %s\nappendonly yes\nappendfsync everysec\ndir /data\nmaxmemory 96mb\nmaxmemory-policy noeviction\n' "$REDIS_PASSWORD" > /data/redis.conf
+              cat > /data/redis.conf <<EOF
+              port 0
+              tls-port 6379
+              tls-cert-file /etc/redis-tls/tls.crt
+              tls-key-file /etc/redis-tls/tls.key
+              tls-ca-cert-file /etc/internal-ca/ca.crt
+              tls-auth-clients no
+              appendonly yes
+              appendfsync everysec
+              dir /data
+              maxmemory 96mb
+              maxmemory-policy noeviction
+              user default on >${REDIS_PASSWORD} ~* &* +@all
+              user revocation_ro on >${REDIS_REVOCATION_PASSWORD} -@all +ping +get +mget ~revoked:*
+              EOF
               exec redis-server /data/redis.conf
           env:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: saas-secrets
+                  name: redis-secrets
                   key: REDIS_PASSWORD
+            - name: REDIS_REVOCATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secrets
+                  key: REDIS_REVOCATION_PASSWORD
           ports:
             - containerPort: 6379
-              name: redis
+              name: redis-tls
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -72,6 +88,12 @@ spec:
           volumeMounts:
             - name: redis-data
               mountPath: /data
+            - name: redis-tls
+              mountPath: /etc/redis-tls
+              readOnly: true
+            - name: internal-ca
+              mountPath: /etc/internal-ca
+              readOnly: true
           resources:
             requests:
               cpu: "50m"
@@ -81,18 +103,24 @@ spec:
               memory: "192Mi"
           readinessProbe:
             exec:
-              command: ["sh", "-c", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+              command: ["sh", "-c", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli --tls --cacert /etc/internal-ca/ca.crt -h 127.0.0.1 ping | grep -q PONG']
             initialDelaySeconds: 3
             periodSeconds: 5
           livenessProbe:
             exec:
-              command: ["sh", "-c", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+              command: ["sh", "-c", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli --tls --cacert /etc/internal-ca/ca.crt -h 127.0.0.1 ping | grep -q PONG']
             initialDelaySeconds: 10
             periodSeconds: 10
       volumes:
         - name: redis-data
           persistentVolumeClaim:
             claimName: redis-data
+        - name: redis-tls
+          secret:
+            secretName: redis-internal-tls
+        - name: internal-ca
+          configMap:
+            name: internal-ca
 ---
 apiVersion: v1
 kind: Service
@@ -106,6 +134,6 @@ spec:
   selector:
     app: diabetes-redis
   ports:
-    - port: 6379
+    - name: redis-tls
+      port: 6379
       targetPort: 6379
-      protocol: TCP

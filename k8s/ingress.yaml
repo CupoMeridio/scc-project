@@ -1,67 +1,99 @@
 # FILE: k8s/ingress.yaml
-# RUOLO: Gateway d'ingresso NGINX con misure di sicurezza perimetrali.
-# NOTE: server-snippet e configuration-snippet sono stati rimossi (P3, CVE-2021-25742).
-# Gli header di sicurezza sono impostati a livello applicativo (middleware FastAPI + nginx.conf frontend).
-# Il filtro dei metodi HTTP è gestito da FastAPI (405 automatico) e da frontend/nginx.conf
-# (405 per metodi diversi da GET/HEAD).
-# Il progetto Ingress NGINX è stato ritirato a marzo 2026; questa versione è pinnata per il esame.
-# In produzione, valutare Gateway API come percorso futuro.
+# RUOLO: Gateway NGINX Ingress separato per zona con TLS end-to-end verso le API (/api/* -> HTTPS:443).
+# NOTE: Zero snippet-annotations (P3 / CVE-2021-25742), /api/cgm/ingest mai esposto sull'Ingress (D2).
 
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: diabetes-api-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/limit-rps: "1000"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/limit-connections: "150"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "10"
+    nginx.ingress.kubernetes.io/server-tokens: "false"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - localhost
+      secretName: diabetes-tls-cert
+  rules:
+    - http:
+        paths:
+          - path: /api/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: diabetes-iam-service
+                port:
+                  number: 443
+          - path: /api/patient
+            pathType: Prefix
+            backend:
+              service:
+                name: diabetes-clinical-service
+                port:
+                  number: 443
+          - path: /api/doctor
+            pathType: Prefix
+            backend:
+              service:
+                name: diabetes-clinical-service
+                port:
+                  number: 443
+          - path: /api/manager
+            pathType: Prefix
+            backend:
+              service:
+                name: diabetes-manager-service
+                port:
+                  number: 443
+          - path: /api/health
+            pathType: Exact
+            backend:
+              service:
+                name: diabetes-iam-service
+                port:
+                  number: 443
+          - path: /api/ready
+            pathType: Exact
+            backend:
+              service:
+                name: diabetes-iam-service
+                port:
+                  number: 443
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: diabetes-forecasting-ingress
   namespace: default
   annotations:
-    kubernetes.io/ingress.class: "nginx"
-
-    # 0. SSL-REDIRECT: HTTPS obbligatorio (TLS in transit)
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-
-    # 1. RATE LIMITING (DoS prevention)
-    # limit-rps: 1000 per IP. Dimensionato per stress test wrk da singolo IP (localhost).
-    # In produzione con NAT condiviso, andrebbe abbassato a 100-150 RPS per IP.
     nginx.ingress.kubernetes.io/limit-rps: "1000"
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
-
-    # 2. CONNECTION LIMITING (Slowloris prevention)
     nginx.ingress.kubernetes.io/limit-connections: "150"
-
-    # 3. BUFFER OVERFLOW PROTECTION
     nginx.ingress.kubernetes.io/proxy-body-size: "1m"
-    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
-
-    # 4. TIMEOUT RESTRITTIVI
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "10"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "10"
-
-    # 5. Nascondi versione NGINX
     nginx.ingress.kubernetes.io/server-tokens: "false"
-
 spec:
   ingressClassName: nginx
-
-  # TLS termination con certificato autofirmato (demo)
   tls:
     - hosts:
         - localhost
       secretName: diabetes-tls-cert
-
   rules:
     - http:
         paths:
-          # Backend SaaS (IAM, Paziente, Diabetologo, Center Manager)
-          # /api/cgm/ingest è bloccato a livello applicativo (X-Forwarded-Proto check)
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: diabetes-saas-service
-                port:
-                  number: 80
-          # Frontend Web UI
           - path: /
             pathType: Prefix
             backend:

@@ -1,6 +1,26 @@
 # Evidenza pinning immagini base per digest (P7/P12)
-# Generato: 2026-11-26T11:35:57Z
+# Generato: 2026-11-27
 # Comando: docker buildx imagetools inspect <immagine>
+# Pin Python corrente (2026-11-27): python:3.14.10-slim, Debian 13 (trixie)
+# Digest indice multi-arch: sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b
+# Manifest linux/amd64: sha256:080b4f1282edb604b21e61dfca35d1d215ed6cd1c17de27ccfc34e6fadc4ee49
+# Pin Frontend corrente (2026-11-27): nginxinc/nginx-unprivileged:alpine-slim (alpine:3.24)
+# Digest indice multi-arch: sha256:a8cb0f33d51fa107c96fd2bd3a71aaf564ec131e9d2bdf8700944f0ed8b170d7
+# Manifest linux/amd64: sha256:52c82c7ad265b75620673ffa0de1d9182a78121e05c5c993b3e076413bc6f69c
+# Il dump python:3.11.11-slim sottostante è mantenuto come evidenza storica dei pin sostituiti.
+
+$ docker buildx imagetools inspect python:3.14.10-slim
+Name:      docker.io/library/python:3.14.10-slim
+MediaType: application/vnd.oci.image.index.v1+json
+Digest:    sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b
+
+Manifests:
+  Name:        docker.io/library/python:3.14.10-slim@sha256:080b4f1282edb604b21e61dfca35d1d215ed6cd1c17de27ccfc34e6fadc4ee49
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/amd64
+  Annotations:
+    org.opencontainers.image.version: 3.14.10-slim-trixie
+    org.opencontainers.image.created: 2026-11-24T04:52:57Z
 
 $ docker buildx imagetools inspect python:3.11.11-slim
 Name:      docker.io/library/python:3.11.11-slim

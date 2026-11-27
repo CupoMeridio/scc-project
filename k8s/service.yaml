@@ -36,12 +36,7 @@ spec:
 
   # ports: Mappatura delle porte di rete
   ports:
-    # name: Etichetta testuale della porta
-    - name: http
-      # port: 80 -> La porta su cui il Service accetta connessioni all'interno del cluster (dall'Ingress NGINX).
-      port: 80
-      # targetPort: 8000 -> La porta su cui l'applicazione FastAPI è effettivamente in ascolto dentro il container.
-      # Il Service riceve sulla porta 80 e "smista" (port-forwarding con bilanciamento Round-Robin) alla porta 8000 di uno dei pod sani.
+    - name: https
+      port: 443
       targetPort: 8000
-      # protocol: TCP -> Protocollo di trasmissione affidabile a livello di trasporto
       protocol: TCP

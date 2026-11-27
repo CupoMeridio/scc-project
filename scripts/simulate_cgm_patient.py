@@ -423,8 +423,8 @@ def _print_ingest_error(status_code: int, detail: str, ingest_url: str) -> None:
     elif status_code == 403 and "non accessibile dall'esterno" in detail:
         print("    /api/cgm/ingest è solo interno (D2): non è raggiungibile tramite l'Ingress.", file=sys.stderr)
         print("    Usa il port-forward verso il servizio e l'URL locale:", file=sys.stderr)
-        print("      kubectl port-forward svc/diabetes-saas-service 8080:80", file=sys.stderr)
-        print("      ... --endpoint http://127.0.0.1:8080/predict", file=sys.stderr)
+        print("      kubectl port-forward svc/diabetes-ingest-service 8080:443", file=sys.stderr)
+        print("      ... --endpoint https://127.0.0.1:8080/predict --insecure", file=sys.stderr)
 
 
 def _ingest_records(
@@ -443,13 +443,14 @@ def _ingest_records(
     context = ssl._create_unverified_context() if insecure else ssl.create_default_context()
     if not ingest_url.startswith("https"):
         context = None
-    # Timestamp ancorato alla mezzanotte UTC: più replay lo stesso giorno
-    # generano la stessa chiave (patient_id, recorded_at) e l'upsert non
-    # duplica le letture.
-    day_base = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Ancoraggio a ritroso dall'ultima finestra da 5 minuti <= now UTC:
+    # evita timestamp futuri a cavallo della mezzanotte e mantiene letture fresche.
+    now_utc = datetime.now(timezone.utc)
+    end_anchor = now_utc.replace(minute=(now_utc.minute // 5) * 5, second=0, microsecond=0)
+    base_time = end_anchor - timedelta(minutes=5 * max(0, len(records) - 1))
     ok = 0
-    for rec in records:
-        recorded_at = (day_base + timedelta(minutes=5 * rec["step_index"])).isoformat()
+    for idx, rec in enumerate(records):
+        recorded_at = (base_time + timedelta(minutes=5 * idx)).isoformat()
         body = json.dumps({
             "patient_code": patient_code,
             "glucose_mmol": rec["current_glucose"],
@@ -480,8 +481,8 @@ def _ingest_records(
         except urllib.error.URLError as err:
             print(f"[!] ERRORE di rete verso {ingest_url}: {err.reason}", file=sys.stderr)
             print("    Il servizio non è raggiungibile: avvia il port-forward e riprova.", file=sys.stderr)
-            print("      kubectl port-forward svc/diabetes-saas-service 8080:80", file=sys.stderr)
-            print("      ... --endpoint http://127.0.0.1:8080/predict", file=sys.stderr)
+            print("      kubectl port-forward svc/diabetes-ingest-service 8080:443", file=sys.stderr)
+            print("      ... --endpoint https://127.0.0.1:8080/predict --insecure", file=sys.stderr)
             return 1
         if delay > 0:
             time.sleep(delay)

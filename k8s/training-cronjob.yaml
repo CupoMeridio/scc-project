@@ -1,0 +1,134 @@
+# FILE: k8s/training-cronjob.yaml
+# RUOLO: Training Zone isolata — retraining periodico Champion/Challenger con bootstrap CI e firma Ed25519 (V4).
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: diabetes-trainer-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: diabetes-trainer-ml-rollout
+  namespace: default
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["diabetes-forecasting-api"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: diabetes-trainer-ml-rollout
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: diabetes-trainer-sa
+    namespace: default
+roleRef:
+  kind: Role
+  name: diabetes-trainer-ml-rollout
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: diabetes-model-trainer
+  namespace: default
+  labels:
+    app: diabetes-model-trainer
+    zone: training
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: diabetes-model-trainer
+            zone: training
+        spec:
+          serviceAccountName: diabetes-trainer-sa
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: trainer
+              image: diabetes-trainer:1.0.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: training-secrets
+                      key: DATABASE_URL
+                - name: MODEL_REPO_URL
+                  value: "https://diabetes-model-repo"
+                - name: MODEL_CA_CERT_PATH
+                  value: "/etc/internal-ca/ca.crt"
+                - name: MODEL_REPO_UPLOAD_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: training-secrets
+                      key: MODEL_REPO_UPLOAD_TOKEN
+                - name: MODEL_SIGNING_PRIVATE_KEY_PEM
+                  valueFrom:
+                    secretKeyRef:
+                      name: training-secrets
+                      key: MODEL_SIGNING_PRIVATE_KEY_PEM
+                - name: TRAIN_EPOCHS
+                  value: "12"
+                - name: MIN_TRAINING_SEQUENCES
+                  value: "200"
+                - name: MIN_TEST_WINDOWS
+                  value: "50"
+                - name: MIN_RMSE_IMPROVEMENT
+                  value: "0.005"
+                - name: MAX_ACC_REGRESSION
+                  value: "0.01"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: tmp-volume
+                  mountPath: /tmp
+                - name: pg-ca
+                  mountPath: /etc/pg-ca
+                  readOnly: true
+                - name: internal-ca
+                  mountPath: /etc/internal-ca
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1280Mi"
+          volumes:
+            - name: tmp-volume
+              emptyDir: {}
+            - name: pg-ca
+              secret:
+                secretName: diabetes-pg-ca
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+            - name: internal-ca
+              configMap:
+                name: internal-ca

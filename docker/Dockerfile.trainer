@@ -1,0 +1,33 @@
+# FILE: docker/Dockerfile.trainer
+# RUOLO: Immagine isolata per la Training Zone (CronJob Champion/Challenger).
+#        Usa requirements-trainer.lock con --require-hashes contro dependency confusion (V6).
+#        Zero dataset nell'immagine: legge solo la vista pseudonimizzata PostgreSQL (D1).
+
+FROM python:3.14.10-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b AS builder
+WORKDIR /build
+COPY requirements-trainer.lock .
+RUN pip install --no-cache-dir --require-hashes --user \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements-trainer.lock
+
+FROM python:3.14.10-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b AS runner
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/home/appuser/.local/bin:$PATH" \
+    PYTHONUSERBASE="/home/appuser/.local" \
+    PYTHONPATH="/app:/home/appuser/.local/lib/python3.14/site-packages" \
+    HOME="/tmp"
+
+WORKDIR /app
+
+RUN addgroup --system --gid 10001 appgroup && \
+    adduser --system --uid 10001 --ingroup appgroup --home /home/appuser appuser
+
+COPY --from=builder --chown=appuser:appgroup /root/.local /home/appuser/.local
+COPY --chown=appuser:appgroup common/ /app/common/
+COPY --chown=appuser:appgroup model/train_lstm.py model/retrain_pipeline.py /app/model/
+
+RUN chown -R appuser:appgroup /app
+
+USER 10001:10001
+ENTRYPOINT ["python3", "-m", "model.retrain_pipeline"]

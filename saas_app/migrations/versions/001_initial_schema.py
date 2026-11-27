@@ -1,13 +1,7 @@
-"""Initial SaaS schema: tabelle, trigger append-only audit_logs e ruoli DB (saas_migrator/saas_app).
+"""Initial SaaS schema: tabelle, trigger append-only audit_logs, viste e permessi per 6 ruoli DB.
 
-Consolida le ex migrazioni 001 (schema) e 002 (trigger append-only) in un'unica
-migrazione iniziale, estendendo il trigger a TRUNCATE e introducendo la separazione
-dei ruoli PostgreSQL: saas_migrator (proprietario, solo migrazioni) e saas_app
-(permessi minimi CRUD; audit_logs in sola lettura+inserimento).
-
-Revision ID: 001_initial
-Revises:
-Create Date: 2026-11-26 00:30:00+00:00
+Le password/creazioni dei 6 ruoli DB sono gestite dichiarativamente da CloudNativePG
+(`managed.roles` in k8s/postgres-ha.yaml): `saas_migrator` non richiede CREATEROLE (V8).
 """
 import os
 from typing import Sequence, Union
@@ -26,19 +20,27 @@ def upgrade() -> None:
         "users",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("username", sa.String(length=64), nullable=False),
-        sa.Column("email", sa.String(length=120), nullable=False),
-        sa.Column("full_name", sa.String(length=120), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
         sa.Column("role", sa.String(length=20), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("must_change_password", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="active"),
+        sa.Column("provision_key", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("username"),
-        sa.UniqueConstraint("email"),
+        sa.UniqueConstraint("provision_key"),
     )
     op.create_index("ix_users_id", "users", ["id"])
     op.create_index("ix_users_username", "users", ["username"], unique=True)
     op.create_index("ix_users_role", "users", ["role"])
+
+    op.create_table(
+        "doctor_profiles",
+        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), primary_key=True),
+        sa.Column("full_name", sa.String(length=120), nullable=False),
+        sa.Column("email", sa.String(length=120), nullable=False),
+        sa.UniqueConstraint("email"),
+    )
 
     op.create_table(
         "patients",
@@ -46,11 +48,14 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False, unique=True),
         sa.Column("doctor_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("patient_code", sa.String(length=32), nullable=False),
+        sa.Column("full_name", sa.String(length=120), nullable=False),
+        sa.Column("email", sa.String(length=120), nullable=False),
         sa.Column("diet_carb_limit_g", sa.Float(), nullable=False),
         sa.Column("target_min_mmol", sa.Float(), nullable=False),
         sa.Column("target_max_mmol", sa.Float(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("patient_code"),
+        sa.UniqueConstraint("email"),
     )
     op.create_index("ix_patients_id", "patients", ["id"])
     op.create_index("ix_patients_doctor_id", "patients", ["doctor_id"])
@@ -134,13 +139,107 @@ def upgrade() -> None:
     )
     op.create_index("ix_audit_logs_actor_user_id", "audit_logs", ["actor_user_id"])
 
-    # --- PostgreSQL-only: trigger append-only + ruoli DB con permessi minimi ---
+    # --- Viste SQL aggregate per Manager (percorso unico SQLite/PostgreSQL, V5) ---
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
+        op.execute(sa.text("""
+            CREATE VIEW v_manager_overview AS
+            SELECT
+                (SELECT COUNT(*) FROM patients) AS total_patients,
+                (SELECT COUNT(*) FROM doctor_profiles) AS total_doctors,
+                (SELECT COUNT(*) FROM meals_predictions WHERE outcome_code <> 'NO_RECENT_DATA') AS total_meals_predictions,
+                (SELECT COUNT(*) FROM meals_predictions WHERE doctor_flag = 1) AS total_flagged_events,
+                (SELECT COUNT(*) FROM interventions) AS total_interventions,
+                (SELECT COUNT(*) FROM interventions WHERE cause = 'model_error') AS interventions_by_model_error,
+                (SELECT COUNT(*) FROM interventions WHERE cause = 'patient_behavior') AS interventions_by_patient_behavior,
+                (SELECT AVG(ABS(forecasted_glucose_mmol - actual_glucose_30m_mmol))
+                 FROM meals_predictions
+                 WHERE actual_glucose_30m_mmol IS NOT NULL
+                   AND forecasted_glucose_mmol IS NOT NULL
+                   AND outcome_code <> 'NO_RECENT_DATA') AS avg_prediction_mae_mmol,
+                (SELECT COUNT(*) FROM meals_predictions
+                 WHERE outcome_code <> 'NO_RECENT_DATA'
+                   AND declared_at >= datetime('now', '-30 days')) AS meals_last_30_days;
+        """))
+        op.execute(sa.text("""
+            CREATE VIEW v_manager_risk_distribution AS
+            SELECT risk_class, COUNT(*) AS cnt
+            FROM meals_predictions
+            WHERE risk_class BETWEEN 1 AND 7
+              AND outcome_code <> 'NO_RECENT_DATA'
+            GROUP BY risk_class;
+        """))
+        op.execute(sa.text("""
+            CREATE VIEW v_manager_weekly_interventions AS
+            SELECT
+                CAST((julianday('now') - julianday(created_at)) / 7 AS INTEGER) AS week_idx,
+                COUNT(*) AS total_interventions,
+                SUM(CASE WHEN cause = 'model_error' THEN 1 ELSE 0 END) AS model_error_count,
+                SUM(CASE WHEN cause = 'patient_behavior' THEN 1 ELSE 0 END) AS patient_behavior_count
+            FROM interventions
+            WHERE created_at >= datetime('now', '-28 days')
+              AND created_at <= datetime('now')
+            GROUP BY 1;
+        """))
         return
 
+    # --- Viste PostgreSQL ---
+    op.execute(sa.text("""
+        CREATE OR REPLACE VIEW v_manager_overview AS
+        SELECT
+            (SELECT COUNT(*) FROM patients) AS total_patients,
+            (SELECT COUNT(*) FROM doctor_profiles) AS total_doctors,
+            (SELECT COUNT(*) FROM meals_predictions WHERE outcome_code <> 'NO_RECENT_DATA') AS total_meals_predictions,
+            (SELECT COUNT(*) FROM meals_predictions WHERE doctor_flag IS TRUE) AS total_flagged_events,
+            (SELECT COUNT(*) FROM interventions) AS total_interventions,
+            (SELECT COUNT(*) FROM interventions WHERE cause = 'model_error') AS interventions_by_model_error,
+            (SELECT COUNT(*) FROM interventions WHERE cause = 'patient_behavior') AS interventions_by_patient_behavior,
+            (SELECT AVG(ABS(forecasted_glucose_mmol - actual_glucose_30m_mmol))
+             FROM meals_predictions
+             WHERE actual_glucose_30m_mmol IS NOT NULL
+               AND forecasted_glucose_mmol IS NOT NULL
+               AND outcome_code <> 'NO_RECENT_DATA') AS avg_prediction_mae_mmol,
+            (SELECT COUNT(*) FROM meals_predictions
+             WHERE outcome_code <> 'NO_RECENT_DATA'
+               AND declared_at >= NOW() - INTERVAL '30 days') AS meals_last_30_days;
+    """))
+    op.execute(sa.text("""
+        CREATE OR REPLACE VIEW v_manager_risk_distribution AS
+        SELECT risk_class, COUNT(*) AS cnt
+        FROM meals_predictions
+        WHERE risk_class BETWEEN 1 AND 7
+          AND outcome_code <> 'NO_RECENT_DATA'
+        GROUP BY risk_class;
+    """))
+    op.execute(sa.text("""
+        CREATE OR REPLACE VIEW v_manager_weekly_interventions AS
+        SELECT
+            FLOOR(EXTRACT(EPOCH FROM (NOW() - created_at)) / 604800.0)::int AS week_idx,
+            COUNT(*) AS total_interventions,
+            SUM(CASE WHEN cause = 'model_error' THEN 1 ELSE 0 END) AS model_error_count,
+            SUM(CASE WHEN cause = 'patient_behavior' THEN 1 ELSE 0 END) AS patient_behavior_count
+        FROM interventions
+        WHERE created_at >= NOW() - INTERVAL '28 days'
+          AND created_at <= NOW()
+        GROUP BY 1;
+    """))
+
+    train_salt = os.getenv("TRAINING_PSEUDO_SALT", "default-training-pseudo-salt-override-in-k8s")
+    bind.execute(sa.text("SELECT set_config('app.train_salt', :salt, true)"), {"salt": train_salt})
+    op.execute(sa.text("""
+        DO $$
+        BEGIN
+            EXECUTE format(
+                'CREATE OR REPLACE VIEW v_training_cgm_series AS '
+                'SELECT encode(sha256((%L || '':'' || patient_id::text)::bytea), ''hex'') AS pseudo_patient_id, '
+                'recorded_at, glucose_mmol, insulin_u, cho_rate FROM cgm_readings',
+                current_setting('app.train_salt')
+            );
+        END
+        $$;
+    """))
+
     # Trigger append-only su audit_logs: blocca UPDATE, DELETE e TRUNCATE.
-    # FOR EACH STATEMENT è più efficiente e copre anche il caso di tabella vuota.
     op.execute(sa.text("""
         CREATE OR REPLACE FUNCTION prevent_audit_modification()
         RETURNS trigger AS $$
@@ -157,46 +256,67 @@ def upgrade() -> None:
         EXECUTE FUNCTION prevent_audit_modification();
     """))
 
-    # Ruolo applicativo saas_app: permessi minimi (SELECT/INSERT/UPDATE/DELETE).
-    # Su audit_logs: solo SELECT e INSERT (nessuna modifica o cancellazione).
-    # La password viene da env var SAAS_APP_PASSWORD (iniettata dal Job di migrazione).
-    # Viene passata come parametro di set_config (mai interpolata nel testo SQL) e
-    # applicata con format(%L): una password che contiene apici o '$$' non rompe la migrazione.
-    app_password = os.getenv("SAAS_APP_PASSWORD", "")
-    if app_password:
-        bind.execute(sa.text("SELECT set_config('app.saas_app_pw', :pw, true)"), {"pw": app_password})
-        op.execute(sa.text("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'saas_app') THEN
-                    EXECUTE format('CREATE ROLE saas_app WITH LOGIN PASSWORD %L',
-                                   current_setting('app.saas_app_pw'));
-                ELSE
-                    EXECUTE format('ALTER ROLE saas_app WITH LOGIN PASSWORD %L',
-                                   current_setting('app.saas_app_pw'));
-                END IF;
-            END
-            $$;
-        """))
+    # Permessi per i 6 ruoli DB gestiti dichiarativamente da CloudNativePG (o fixture tests/pg/).
+    op.execute(sa.text("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;"))
 
-    # Grant sulle tabelle esistenti
-    op.execute(sa.text(
-        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO saas_app;"
-    ))
-    op.execute(sa.text(
-        "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO saas_app;"
-    ))
-    # audit_logs: revoca UPDATE e DELETE (sola lettura + inserimento)
-    op.execute(sa.text("REVOKE UPDATE, DELETE ON audit_logs FROM saas_app;"))
-    # Grant di default per le tabelle create da future migrazioni
-    op.execute(sa.text(
-        "ALTER DEFAULT PRIVILEGES FOR ROLE saas_migrator IN SCHEMA public "
-        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO saas_app;"
-    ))
-    op.execute(sa.text(
-        "ALTER DEFAULT PRIVILEGES FOR ROLE saas_migrator IN SCHEMA public "
-        "GRANT USAGE, SELECT ON SEQUENCES TO saas_app;"
-    ))
+    def _grant_if_exists(role_name: str, statements: Sequence[str]) -> None:
+        exists = bind.execute(sa.text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": role_name}).first()
+        if not exists:
+            return
+        for stmt in statements:
+            op.execute(sa.text(stmt))
+
+    # 1. Identity Zone (saas_iam): solo account/token/audit + patient_code (ZERO nome/email/dati clinici).
+    _grant_if_exists("saas_iam", [
+        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM saas_iam;",
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON users TO saas_iam;",
+        "GRANT SELECT, INSERT ON revoked_tokens TO saas_iam;",
+        "GRANT SELECT (id, user_id, patient_code) ON patients TO saas_iam;",
+        "GRANT SELECT (id), INSERT ON audit_logs TO saas_iam;",
+        "GRANT USAGE, SELECT ON SEQUENCE users_id_seq, revoked_tokens_id_seq, audit_logs_id_seq TO saas_iam;",
+    ])
+
+    # 2. Application Zone Clinica (saas_clinical): ZERO accesso a users, revoked_tokens, devices.
+    _grant_if_exists("saas_clinical", [
+        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM saas_clinical;",
+        "GRANT SELECT, INSERT, UPDATE ON patients, meals_predictions, interventions TO saas_clinical;",
+        "GRANT SELECT ON doctor_profiles, cgm_readings TO saas_clinical;",
+        "GRANT SELECT, INSERT ON audit_logs TO saas_clinical;",
+        "GRANT USAGE, SELECT ON SEQUENCE patients_id_seq, meals_predictions_id_seq, interventions_id_seq, audit_logs_id_seq TO saas_clinical;",
+    ])
+
+    # 3. Application Zone Manager (saas_manager): SOLO viste aggregate anonime + audit INSERT.
+    _grant_if_exists("saas_manager", [
+        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM saas_manager;",
+        "GRANT SELECT ON v_manager_overview, v_manager_risk_distribution, v_manager_weekly_interventions TO saas_manager;",
+        "GRANT SELECT (id), INSERT ON audit_logs TO saas_manager;",
+        "GRANT USAGE, SELECT ON SEQUENCE audit_logs_id_seq TO saas_manager;",
+    ])
+
+    # 4. DMZ Internal Ingest (saas_ingest): SOLO dispositivi, pazienti non-PII (id/patient_code/targets) e audit.
+    _grant_if_exists("saas_ingest", [
+        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM saas_ingest;",
+        "GRANT SELECT ON devices TO saas_ingest;",
+        "GRANT SELECT ON patients TO saas_ingest;",
+        "GRANT SELECT (id), INSERT ON audit_logs TO saas_ingest;",
+        "GRANT USAGE, SELECT ON SEQUENCE audit_logs_id_seq TO saas_ingest;",
+    ])
+
+    # 5. Ingestion Worker (saas_worker): letture CGM + backfill verità a terra + cleanup token scaduti.
+    _grant_if_exists("saas_worker", [
+        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM saas_worker;",
+        "GRANT SELECT ON patients TO saas_worker;",
+        "GRANT SELECT, INSERT ON cgm_readings TO saas_worker;",
+        "GRANT SELECT, UPDATE (actual_glucose_30m_mmol) ON meals_predictions TO saas_worker;",
+        "GRANT SELECT (id, expires_at), DELETE ON revoked_tokens TO saas_worker;",
+        "GRANT USAGE, SELECT ON SEQUENCE cgm_readings_id_seq TO saas_worker;",
+    ])
+
+    # 6. Training Zone (saas_trainer): SOLO vista pseudonimizzata v_training_cgm_series.
+    _grant_if_exists("saas_trainer", [
+        "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM saas_trainer;",
+        "GRANT SELECT ON v_training_cgm_series TO saas_trainer;",
+    ])
 
 
 def downgrade() -> None:
@@ -204,9 +324,14 @@ def downgrade() -> None:
     if bind.dialect.name == "postgresql":
         op.execute(sa.text("DROP TRIGGER IF EXISTS audit_log_no_modification ON audit_logs;"))
         op.execute(sa.text("DROP FUNCTION IF EXISTS prevent_audit_modification();"))
-        op.execute(sa.text("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM saas_app;"))
-        op.execute(sa.text("REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM saas_app;"))
-        op.execute(sa.text("DROP ROLE IF EXISTS saas_app;"))
+        op.execute(sa.text("DROP VIEW IF EXISTS v_training_cgm_series;"))
+        op.execute(sa.text("DROP VIEW IF EXISTS v_manager_weekly_interventions;"))
+        op.execute(sa.text("DROP VIEW IF EXISTS v_manager_risk_distribution;"))
+        op.execute(sa.text("DROP VIEW IF EXISTS v_manager_overview;"))
+    else:
+        op.execute(sa.text("DROP VIEW IF EXISTS v_manager_weekly_interventions;"))
+        op.execute(sa.text("DROP VIEW IF EXISTS v_manager_risk_distribution;"))
+        op.execute(sa.text("DROP VIEW IF EXISTS v_manager_overview;"))
 
     op.drop_table("audit_logs")
     op.drop_table("revoked_tokens")
@@ -215,4 +340,5 @@ def downgrade() -> None:
     op.drop_table("cgm_readings")
     op.drop_table("devices")
     op.drop_table("patients")
+    op.drop_table("doctor_profiles")
     op.drop_table("users")

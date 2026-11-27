@@ -1,8 +1,6 @@
 # FILE: k8s/seed-job.yaml
-# RUOLO: Job Kubernetes dedicato alle sole migrazioni Alembic.
-# I dati demo (con credenziali generate) si caricano solo con make seed-demo.
-# NON monta il dataset OhioT1DM: RUN_DEMO_SEED=false, nessuna serie viene letta
-# (il volume dati è nel solo k8s/seed-demo-job.yaml, Decisione D1).
+# RUOLO: Job Kubernetes dedicato alle migrazioni Alembic, creazione delle viste di sicurezza
+#        e assegnazione permessi ai 6 ruoli gestiti da CloudNativePG (`managed.roles`, V8).
 
 apiVersion: batch/v1
 kind: Job
@@ -30,8 +28,6 @@ spec:
           type: RuntimeDefault
       containers:
         - name: seed
-          # Stessa immagine unica del piano dati (Dockerfile.saas): il Job cambia
-          # solo il comando di avvio (P7).
           image: diabetes-saas-api:1.0.0
           imagePullPolicy: IfNotPresent
           command: ["python3", "-m", "saas_app.seed_cli"]
@@ -43,19 +39,23 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: saas-secrets
+                  name: migrator-secrets
                   key: MIGRATOR_DATABASE_URL
-            - name: SAAS_APP_PASSWORD
+            - name: TRAINING_PSEUDO_SALT
               valueFrom:
                 secretKeyRef:
-                  name: saas-secrets
-                  key: SAAS_APP_PASSWORD
+                  name: migrator-secrets
+                  key: TRAINING_PSEUDO_SALT
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: pg-ca
+              mountPath: /etc/pg-ca
+              readOnly: true
           resources:
             requests:
               cpu: "100m"
@@ -63,3 +63,10 @@ spec:
             limits:
               cpu: "500m"
               memory: "384Mi"
+      volumes:
+        - name: pg-ca
+          secret:
+            secretName: diabetes-pg-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

@@ -8,6 +8,7 @@ chiamata bloccante finisce nell'event loop.
 
 import logging
 import socket
+import ssl
 import time
 from typing import Any, Dict, List, Optional
 
@@ -19,23 +20,46 @@ from saas_app.config import saas_settings
 logger = logging.getLogger("saas-api.ml_client")
 
 _shared_client: Optional[httpx.Client] = None
+_metrics_client: Optional[httpx.Client] = None
 
 
 def get_http_client() -> httpx.Client:
     global _shared_client
     if _shared_client is None or _shared_client.is_closed:
+        verify_opt: bool | str = saas_settings.ML_CA_CERT_PATH or True
         _shared_client = httpx.Client(
+            verify=verify_opt,
             timeout=httpx.Timeout(connect=1.5, read=3.0, write=1.5, pool=2.0),
             limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
         )
     return _shared_client
 
 
+def _get_metrics_client() -> httpx.Client:
+    """Client TLS per scraping /metrics per IP pod: verifica la CA interna senza vincolo hostname su IP dinamico."""
+    global _metrics_client
+    if _metrics_client is None or _metrics_client.is_closed:
+        verify_opt: bool | ssl.SSLContext = True
+        if saas_settings.ML_CA_CERT_PATH:
+            ctx = ssl.create_default_context(cafile=saas_settings.ML_CA_CERT_PATH)
+            ctx.check_hostname = False
+            verify_opt = ctx
+        _metrics_client = httpx.Client(
+            verify=verify_opt,
+            timeout=httpx.Timeout(connect=1.5, read=3.0, write=1.5, pool=2.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _metrics_client
+
+
 def close_http_client() -> None:
-    global _shared_client
+    global _shared_client, _metrics_client
     if _shared_client is not None and not _shared_client.is_closed:
         _shared_client.close()
     _shared_client = None
+    if _metrics_client is not None and not _metrics_client.is_closed:
+        _metrics_client.close()
+    _metrics_client = None
 
 
 class MlServiceUnavailableError(Exception):
@@ -75,6 +99,7 @@ def call_ml_predict(
 
 
 def _resolve_ml_metric_urls() -> List[str]:
+    scheme = "https" if saas_settings.ML_CA_CERT_PATH or saas_settings.ML_SERVICE_URL.startswith("https://") else "http"
     targets: List[str] = []
     try:
         infos = socket.getaddrinfo(
@@ -87,7 +112,7 @@ def _resolve_ml_metric_urls() -> List[str]:
             ip = info[4][0]
             if ip not in seen_ips:
                 seen_ips.add(ip)
-                targets.append(f"http://{ip}:{saas_settings.ML_METRICS_PORT}/metrics")
+                targets.append(f"{scheme}://{ip}:{saas_settings.ML_METRICS_PORT}/metrics")
     except socket.gaierror:
         targets.append(saas_settings.ML_SERVICE_URL.rstrip("/") + "/metrics")
     return targets
@@ -96,7 +121,7 @@ def _resolve_ml_metric_urls() -> List[str]:
 def collect_ml_pod_metrics() -> List[Dict[str, Any]]:
     """Raccoglie /metrics dai pod ML. Chiamata da un endpoint `def`, quindi in thread pool."""
     targets = _resolve_ml_metric_urls()
-    client = get_http_client()
+    client = _get_metrics_client()
     results: List[Dict[str, Any]] = []
     for url in targets:
         try:

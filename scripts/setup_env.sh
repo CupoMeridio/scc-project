@@ -6,9 +6,9 @@
 # Consente di configurare e alternare profili hardware diversi
 # per supportare ambienti eterogenei (CPU su Linux/macOS, NVIDIA CUDA e AMD ROCm su Linux):
 #   1) cpu-minimal : Solo runtime FastAPI, ONNX Runtime e test (zero PyTorch, ~100MB)
-#   2) cpu-train   : Standard di progetto (PyTorch CPU ~350MB, allena in 2s su CPU)
-#   3) gpu-cuda    : PyTorch completo con accelerazione NVIDIA CUDA (~2.5GB)
-#   4) gpu-rocm    : PyTorch completo con accelerazione AMD ROCm (~2.5GB)
+#   2) cpu-train   : Standard di progetto (PyTorch CPU)
+#   3) gpu-cuda    : PyTorch con accelerazione NVIDIA CUDA 13.0
+#   4) gpu-rocm    : PyTorch con accelerazione AMD ROCm 7.1
 #   5) auto        : Rilevamento automatico della GPU tramite lspci / device nodes
 # =============================================================================
 
@@ -18,6 +18,7 @@
 set -euo pipefail
 
 HOST_OS="$(uname -s)"
+PYTHON_BIN="${PYTHON_BIN:-python3.14}"
 
 # Individua la cartella radice del progetto risalendo di un livello rispetto a scripts/
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -74,10 +75,10 @@ if [ -z "${CHOICE}" ]; then
     fi
     echo ""
     echo "  1) cpu-minimal : Solo runtime API e test (FastAPI + ONNX Runtime, ~100MB)"
-    echo "  2) cpu-train   : Standard progetto (PyTorch CPU ~350MB, allena in 2s) [CONSIGLIATO]"
+    echo "  2) cpu-train   : Standard progetto (PyTorch CPU, download variabile) [CONSIGLIATO]"
     if [ "${HOST_OS}" != "Darwin" ]; then
-        echo "  3) gpu-cuda    : PyTorch completo con supporto NVIDIA CUDA (~2.5GB)"
-        echo "  4) gpu-rocm    : PyTorch completo con supporto AMD ROCm (~2.5GB)"
+        echo "  3) gpu-cuda    : PyTorch con supporto NVIDIA CUDA 13.0 (download grande)"
+        echo "  4) gpu-rocm    : PyTorch con supporto AMD ROCm 7.1 (download grande)"
     fi
     echo "  5) auto        : Rilevamento automatico dell'hardware presente"
     echo "====================================================================="
@@ -119,6 +120,18 @@ fi
 
 TARGET_VENV="${VENVS_DIR}/${PROFILE}"
 
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+    echo "[-] Python 3.14 non trovato (comando: ${PYTHON_BIN})."
+    echo "    Installare Python 3.14 con supporto venv o impostare PYTHON_BIN al suo percorso."
+    exit 1
+fi
+
+PYTHON_VERSION="$("${PYTHON_BIN}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+if [ "${PYTHON_VERSION}" != "3.14" ]; then
+    echo "[-] È richiesto Python 3.14; trovato Python ${PYTHON_VERSION}."
+    exit 1
+fi
+
 echo ""
 echo "====================================================================="
 echo "[*] Profilo selezionato: [ ${PROFILE} ]"
@@ -128,7 +141,7 @@ echo "====================================================================="
 # -----------------------------------------------------------------------------
 # CONTROLLO REQUISITI DI BASE: python3-venv e ensurepip
 # -----------------------------------------------------------------------------
-if ! python3 -c "import ensurepip" >/dev/null 2>&1; then
+if ! "${PYTHON_BIN}" -c "import ensurepip" >/dev/null 2>&1; then
     echo "[-] Errore: il modulo 'ensurepip' di Python non e ancora installato sul sistema host."
     if [ "${HOST_OS}" = "Darwin" ]; then
         echo "    Installare Python 3 con Homebrew (brew install python) e riprovare."
@@ -144,57 +157,67 @@ fi
 # -----------------------------------------------------------------------------
 # CREAZIONE / AGGIORNAMENTO DELL'AMBIENTE VIRTUALE
 # -----------------------------------------------------------------------------
+if [ -d "${TARGET_VENV}" ]; then
+    VENV_VERSION="unknown"
+    if [ -x "${TARGET_VENV}/bin/python3" ]; then
+        VENV_VERSION="$("${TARGET_VENV}/bin/python3" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    fi
+    if [ "${VENV_VERSION}" != "3.14" ]; then
+        echo "[*] Ricreo il profilo '${PROFILE}' (Python ${VENV_VERSION}, richiesto 3.14)..."
+        rm -rf -- "${TARGET_VENV}"
+    fi
+fi
+
 if [ -d "${TARGET_VENV}" ] && [ -f "${TARGET_VENV}/bin/python3" ] && [ -f "${TARGET_VENV}/bin/pip" ]; then
-    echo "[✓] L'ambiente '${PROFILE}' esiste gia ed e completo su disco."
+    echo "[✓] L'ambiente '${PROFILE}' esiste gia ed e completo su Python 3.14."
     echo "[*] Cambio istantaneo del puntatore 'venv' attivo..."
 else
     echo "[+] Creazione nuovo ambiente virtuale in ${TARGET_VENV}..."
-    python3 -m venv "${TARGET_VENV}"
+    "${PYTHON_BIN}" -m venv "${TARGET_VENV}"
     
     echo "[+] Aggiornamento pip, setuptools e wheel..."
     "${TARGET_VENV}/bin/pip" install --upgrade pip setuptools wheel
     
     echo "[+] Installazione dipendenze base del microservizio, backend SaaS e suite di test..."
-    "${TARGET_VENV}/bin/pip" install \
-        -r "${PROJECT_ROOT}/requirements.txt" \
-        -r "${PROJECT_ROOT}/requirements-saas.txt" \
-        -r "${PROJECT_ROOT}/requirements-test.txt"
+    "${TARGET_VENV}/bin/pip" install --require-hashes \
+        -r "${PROJECT_ROOT}/requirements.lock" \
+        -r "${PROJECT_ROOT}/requirements-saas.lock" \
+        -r "${PROJECT_ROOT}/requirements-test.lock"
 
     case "${PROFILE}" in
         cpu-minimal)
-            echo "[+] Profilo 'cpu-minimal': installazione pacchetto onnx per grafo minimale..."
-            "${TARGET_VENV}/bin/pip" install onnx
+            echo "[+] Profilo 'cpu-minimal': runtime API e test senza PyTorch."
             ;;
 
         cpu-train)
             echo "[+] Profilo 'cpu-train': installazione PyTorch..."
             if [ "${HOST_OS}" = "Darwin" ]; then
-                "${TARGET_VENV}/bin/pip" install torch torchvision torchaudio
+                "${TARGET_VENV}/bin/pip" install "torch==2.15.0"
             else
                 "${TARGET_VENV}/bin/pip" install \
-                    torch torchvision torchaudio \
+                    "torch==2.15.0" \
                     --index-url https://download.pytorch.org/whl/cpu
             fi
             echo "[+] Installazione dipendenze scientifiche per addestramento offline..."
-            "${TARGET_VENV}/bin/pip" install -r "${PROJECT_ROOT}/requirements-train.txt"
+            "${TARGET_VENV}/bin/pip" install --require-hashes -r "${PROJECT_ROOT}/requirements-train.lock"
             ;;
 
         gpu-cuda)
-            echo "[+] Profilo 'gpu-cuda': installazione PyTorch con supporto NVIDIA CUDA 12.4 (~2.5GB)..."
+            echo "[+] Profilo 'gpu-cuda': installazione PyTorch con supporto NVIDIA CUDA 13.0..."
             "${TARGET_VENV}/bin/pip" install \
-                torch torchvision torchaudio \
-                --index-url https://download.pytorch.org/whl/cu124
+                "torch==2.14.1" \
+                --index-url https://download.pytorch.org/whl/cu130
             echo "[+] Installazione dipendenze scientifiche per addestramento offline..."
-            "${TARGET_VENV}/bin/pip" install -r "${PROJECT_ROOT}/requirements-train.txt"
+            "${TARGET_VENV}/bin/pip" install --require-hashes -r "${PROJECT_ROOT}/requirements-train.lock"
             ;;
 
         gpu-rocm)
-            echo "[+] Profilo 'gpu-rocm': installazione PyTorch con supporto AMD ROCm 6.2 (~2.5GB)..."
+            echo "[+] Profilo 'gpu-rocm': installazione PyTorch con supporto AMD ROCm 7.1..."
             "${TARGET_VENV}/bin/pip" install \
-                torch torchvision torchaudio \
-                --index-url https://download.pytorch.org/whl/rocm6.2
+                "torch==2.13.0" \
+                --index-url https://download.pytorch.org/whl/rocm7.1
             echo "[+] Installazione dipendenze scientifiche per addestramento offline..."
-            "${TARGET_VENV}/bin/pip" install -r "${PROJECT_ROOT}/requirements-train.txt"
+            "${TARGET_VENV}/bin/pip" install --require-hashes -r "${PROJECT_ROOT}/requirements-train.lock"
             ;;
     esac
 fi

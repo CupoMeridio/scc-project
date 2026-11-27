@@ -10,11 +10,11 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from saas_app import repositories as repo
-from saas_app.auth import add_audit_event
+from saas_app.auth import Principal, add_audit_event
 from saas_app.clinical import build_exogenous_vector, map_prediction_to_outcome, range_cutoff
 from saas_app.config import saas_settings
 from saas_app.ml_client import MlServiceUnavailableError, call_ml_predict
-from saas_app.models import CgmReading, MealPrediction, Patient, User
+from saas_app.models import CgmReading, MealPrediction, Patient
 from saas_app.schemas import (
     CgmPoint,
     MealDeclareRequest,
@@ -31,7 +31,7 @@ _NO_RECENT_DATA_OUTCOME = (
 )
 
 
-def _require_patient_profile(db: Session, user: User) -> Patient:
+def _require_patient_profile(db: Session, user: Principal) -> Patient:
     patient = repo.get_patient_by_user_id(db, user.id)
     if patient is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profilo paziente non trovato.")
@@ -122,10 +122,10 @@ def _cgm_points(
     return points
 
 
-def get_summary(db: Session, current_user: User, request: Request) -> PatientSummaryResponse:
+def get_summary(db: Session, current_user: Principal, request: Request) -> PatientSummaryResponse:
     request_id = getattr(request.state, "request_id", "unknown")
     patient = _require_patient_profile(db, current_user)
-    doctor = repo.get_user_by_id(db, patient.doctor_id)
+    doctor = repo.get_doctor_profile(db, patient.doctor_id)
     latest = repo.get_latest_cgm_reading(db, patient.id)
     total_meals, flagged_count = repo.count_patient_meals_and_flags(db, patient.id)
 
@@ -134,7 +134,7 @@ def get_summary(db: Session, current_user: User, request: Request) -> PatientSum
 
     return PatientSummaryResponse(
         patient_code=patient.patient_code,
-        full_name=current_user.full_name,
+        full_name=patient.full_name,
         doctor_name=doctor.full_name if doctor else "Diabetologo assegnato",
         diet_carb_limit_g=patient.diet_carb_limit_g,
         target_min_mmol=patient.target_min_mmol,
@@ -149,7 +149,7 @@ def get_summary(db: Session, current_user: User, request: Request) -> PatientSum
 
 def get_history(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     range_name: Literal["week", "month", "year"],
     request: Request,
 ) -> PatientHistoryResponse:
@@ -187,7 +187,7 @@ def get_history(
 
 def _prepare_meal_inputs(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     payload: MealDeclareRequest,
 ) -> Tuple[Patient, list[float], list[float]]:
     patient = _require_patient_profile(db, current_user)
@@ -210,7 +210,7 @@ class _NoRecentDataError(Exception):
 
 def _save_meal_and_audit(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     patient: Patient,
     payload: MealDeclareRequest,
     current_mmol: Optional[float],
@@ -244,7 +244,7 @@ def _save_meal_and_audit(
 
 def declare_meal(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     payload: MealDeclareRequest,
     request: Request,
 ) -> MealDeclareResponse:

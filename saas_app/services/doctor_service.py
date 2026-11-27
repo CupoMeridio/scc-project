@@ -10,9 +10,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from saas_app import repositories as repo
-from saas_app.auth import add_audit_event, generate_temporary_password, hash_password
+from saas_app.auth import Principal, add_audit_event, generate_temporary_password, hash_password
 from saas_app.clinical import range_cutoff
+from saas_app.config import saas_settings
 from saas_app.db import SessionLocal
+from saas_app.iam_client import (
+    activate_patient_account_via_iam,
+    new_provision_key,
+    provision_patient_account_via_iam,
+)
 from saas_app.models import Intervention, MealPrediction, Patient, User
 from saas_app.schemas import (
     CgmPoint,
@@ -28,7 +34,7 @@ from saas_app.schemas import (
 )
 
 
-def _require_assigned_patient(db: Session, doctor_user: User, patient_id: int, request_id: str = "unknown") -> Patient:
+def _require_assigned_patient(db: Session, doctor_user: Principal, patient_id: int, request_id: str = "unknown") -> Patient:
     patient = repo.get_patient_by_id(db, patient_id)
     if patient is None or patient.doctor_id != doctor_user.id:
         # Non rivelare l'esistenza del paziente: 404 sia per inesistente che per non assegnato.
@@ -60,20 +66,18 @@ def _compute_triage_status(
     return "green", "Valori nella norma"
 
 
-def list_patients(db: Session, current_user: User, request: Request) -> List[DoctorPatientItem]:
+def list_patients(db: Session, current_user: Principal, request: Request) -> List[DoctorPatientItem]:
     request_id = getattr(request.state, "request_id", "unknown")
     patients = repo.list_patients_for_doctor(db, current_user.id)
     patient_ids = [p.id for p in patients]
 
-    # Query batch (una per tipo di dato) al posto di 4 query per ogni paziente (RN08).
-    users = repo.get_users_by_ids(db, [p.user_id for p in patients])
+    # Query batch (una per tipo di dato) sul solo database clinico (zero chiamate IAM).
     latest_cgm = repo.get_latest_cgm_readings_for_patients(db, patient_ids)
     latest_meals = repo.get_latest_meals_for_patients(db, patient_ids)
     flags = repo.count_flags_by_patient(db, patient_ids)
 
     items: List[DoctorPatientItem] = []
     for p in patients:
-        p_user = users.get(p.user_id)
         cgm = latest_cgm.get(p.id)
         meal = latest_meals.get(p.id)
         flags_count = flags.get(p.id, 0)
@@ -83,7 +87,7 @@ def list_patients(db: Session, current_user: User, request: Request) -> List[Doc
             DoctorPatientItem(
                 patient_id=p.id,
                 patient_code=p.patient_code,
-                full_name=p_user.full_name if p_user else p.patient_code,
+                full_name=p.full_name,
                 diet_carb_limit_g=p.diet_carb_limit_g,
                 latest_glucose_mmol=cgm.glucose_mmol if cgm else None,
                 latest_outcome=meal.outcome_code if meal else None,
@@ -100,16 +104,13 @@ def list_patients(db: Session, current_user: User, request: Request) -> List[Doc
 
 def get_patient_detail(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     patient_id: int,
     range_name: Literal["week", "month", "year"],
     request: Request,
 ) -> DoctorPatientDetailResponse:
     request_id = getattr(request.state, "request_id", "unknown")
     patient = _require_assigned_patient(db, current_user, patient_id, request_id)
-    p_user = repo.get_user_by_id(db, patient.user_id)
-    if p_user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account paziente mancante.")
 
     cutoff = range_cutoff(range_name)
     readings = repo.get_cgm_readings_since(db, patient.id, cutoff)
@@ -149,8 +150,8 @@ def get_patient_detail(
     return DoctorPatientDetailResponse(
         patient_id=patient.id,
         patient_code=patient.patient_code,
-        full_name=p_user.full_name,
-        email=p_user.email,
+        full_name=patient.full_name,
+        email=patient.email,
         diet_carb_limit_g=patient.diet_carb_limit_g,
         target_min_mmol=patient.target_min_mmol,
         target_max_mmol=patient.target_max_mmol,
@@ -195,49 +196,69 @@ def get_patient_detail(
 
 def register_patient(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     payload: RegisterPatientRequest,
     request: Request,
 ) -> RegisterPatientResponse:
     request_id = getattr(request.state, "request_id", "unknown")
-    # La password non è più scelta dal medico: il server ne genera una temporanea,
-    # la restituisce una sola volta e impone il cambio al primo accesso (Q5, N3).
-    temporary_password = generate_temporary_password()
-    new_user = User(
-        username=payload.username,
-        email=payload.email,
-        full_name=payload.full_name,
-        password_hash=hash_password(temporary_password),
-        role="patient",
-        must_change_password=True,
-    )
-    db.add(new_user)
-    try:
-        db.flush()
-        new_patient = Patient(
-            user_id=new_user.id,
-            doctor_id=current_user.id,
-            patient_code=payload.patient_code,
-            diet_carb_limit_g=payload.diet_carb_limit_g,
-            target_min_mmol=payload.target_min_mmol,
-            target_max_mmol=payload.target_max_mmol,
+    # Creazione in due passi nella zona clinica (V1):
+    # 1) provision pending su IAM (zero PII clinica); 2) commit DB clinico; 3) activate su IAM.
+    use_iam_service = bool(saas_settings.IAM_INTERNAL_URL and saas_settings.SERVICE_MODE not in ("all", "iam"))
+    provision_key = new_provision_key()
+    if use_iam_service:
+        new_user_id, temporary_password = provision_patient_account_via_iam(payload.username, provision_key)
+    else:
+        temporary_password = generate_temporary_password()
+        new_user = User(
+            username=payload.username,
+            password_hash=hash_password(temporary_password),
+            role="patient",
+            must_change_password=True,
+            status="active",
+            provision_key=provision_key,
         )
-        db.add(new_patient)
+        db.add(new_user)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username, email o codice paziente già registrato.",
+            )
+        new_user_id = new_user.id
+
+    new_patient = Patient(
+        user_id=new_user_id,
+        doctor_id=current_user.id,
+        patient_code=payload.patient_code,
+        full_name=payload.full_name,
+        email=payload.email,
+        diet_carb_limit_g=payload.diet_carb_limit_g,
+        target_min_mmol=payload.target_min_mmol,
+        target_max_mmol=payload.target_max_mmol,
+    )
+    db.add(new_patient)
+    try:
         db.flush()
         add_audit_event(db, current_user, "DOCTOR_REGISTER_PATIENT", request_id, new_patient.id)
         db.commit()
         db.refresh(new_patient)
     except IntegrityError:
         db.rollback()
+        # L'account IAM rimane nello stato non attivabile `pending` (nessun endpoint DELETE).
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username, email o codice paziente già registrato.",
         )
 
+    if use_iam_service:
+        activate_patient_account_via_iam(new_user_id, provision_key)
+
     return RegisterPatientResponse(
         patient_id=new_patient.id,
         patient_code=new_patient.patient_code,
-        full_name=new_user.full_name,
+        full_name=new_patient.full_name,
         diet_carb_limit_g=new_patient.diet_carb_limit_g,
         latest_glucose_mmol=None,
         latest_outcome=None,
@@ -250,7 +271,7 @@ def register_patient(
 
 def update_diet(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     patient_id: int,
     payload: UpdateDietRequest,
     request: Request,
@@ -275,7 +296,7 @@ def update_diet(
 
 def create_intervention(
     db: Session,
-    current_user: User,
+    current_user: Principal,
     patient_id: int,
     payload: CreateInterventionRequest,
     request: Request,

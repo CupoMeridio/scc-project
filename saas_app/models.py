@@ -33,18 +33,18 @@ def ensure_utc(dt: datetime) -> datetime:
 
 
 class User(Base):
-    """Account autenticati (IAM): patient, doctor, manager."""
+    """Account autenticati (IAM): solo identità di accesso, nessuna PII clinica."""
 
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
-    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
+    provision_key: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     patient_profile: Mapped[Optional["Patient"]] = relationship(
@@ -55,8 +55,18 @@ class User(Base):
     )
 
 
+class DoctorProfile(Base):
+    """Profilo anagrafico minimo dei diabetologi nella Application Zone clinica."""
+
+    __tablename__ = "doctor_profiles"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+
+
 class Patient(Base):
-    """Profilo clinico del paziente, dieta prescritta e medico assegnato."""
+    """Profilo clinico e anagrafico del paziente, dieta prescritta e medico assegnato."""
 
     __tablename__ = "patients"
 
@@ -64,6 +74,8 @@ class Patient(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
     doctor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     patient_code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     diet_carb_limit_g: Mapped[float] = mapped_column(Float, default=60.0, nullable=False)
     target_min_mmol: Mapped[float] = mapped_column(Float, default=3.9, nullable=False)
     target_max_mmol: Mapped[float] = mapped_column(Float, default=10.0, nullable=False)

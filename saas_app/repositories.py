@@ -15,6 +15,7 @@ from saas_app.config import saas_settings
 from saas_app.models import (
     CgmReading,
     Device,
+    DoctorProfile,
     Intervention,
     MealPrediction,
     Patient,
@@ -28,8 +29,12 @@ def get_user_by_username(db: Session, username: str) -> Optional[User]:
     return db.execute(select(User).where(User.username == username)).scalar_one_or_none()
 
 
-def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
-    return db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+def get_patient_code_by_user_id(db: Session, user_id: int) -> Optional[str]:
+    return db.execute(select(Patient.patient_code).where(Patient.user_id == user_id)).scalar_one_or_none()
+
+
+def get_doctor_profile(db: Session, user_id: int) -> Optional[DoctorProfile]:
+    return db.execute(select(DoctorProfile).where(DoctorProfile.user_id == user_id)).scalar_one_or_none()
 
 
 def get_patient_by_user_id(db: Session, user_id: int) -> Optional[Patient]:
@@ -96,15 +101,6 @@ def list_patients_for_doctor(db: Session, doctor_id: int) -> Sequence[Patient]:
     return db.execute(
         select(Patient).where(Patient.doctor_id == doctor_id).order_by(Patient.patient_code.asc())
     ).scalars().all()
-
-
-def get_users_by_ids(db: Session, user_ids: Sequence[int]) -> Dict[int, User]:
-    """Utenti indicizzati per id: una query per l'intera lista invece di una per riga (RN08)."""
-    ids = list(user_ids)
-    if not ids:
-        return {}
-    rows = db.execute(select(User).where(User.id.in_(ids))).scalars().all()
-    return {u.id: u for u in rows}
 
 
 def get_latest_cgm_readings_for_patients(db: Session, patient_ids: Sequence[int]) -> Dict[int, CgmReading]:

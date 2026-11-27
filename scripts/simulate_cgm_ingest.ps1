@@ -35,17 +35,17 @@ if ([string]::IsNullOrWhiteSpace($keyB64)) {
 }
 $deviceKey = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($keyB64))
 
-# 2. Port-forward verso il servizio SaaS (endpoint interno: 8080 -> 80).
-Write-Host "[+] Apertura port-forward verso svc/diabetes-saas-service 8080:80..." -ForegroundColor Yellow
+# 2. Port-forward verso il servizio Ingest DMZ (endpoint interno TLS: 8080 -> 443).
+Write-Host "[+] Apertura port-forward verso svc/diabetes-ingest-service 8080:443..." -ForegroundColor Yellow
 $portForward = Start-Process -FilePath "kubectl" `
-    -ArgumentList "port-forward", "svc/diabetes-saas-service", "8080:80" `
+    -ArgumentList "port-forward", "svc/diabetes-ingest-service", "8080:443" `
     -PassThru -NoNewWindow
 Start-Sleep -Seconds 2
 
 try {
     # 3. Invio dei campioni: l'endpoint /predict viene rimappato su /api/cgm/ingest.
     & $Python (Join-Path $ProjectRoot "scripts/simulate_cgm_patient.py") `
-        --ingest --endpoint "http://127.0.0.1:8080/predict" `
+        --ingest --endpoint "https://127.0.0.1:8080/predict" --insecure `
         --patient $Patient --steps $Steps --delay $Delay --device-key $deviceKey
     $exitCode = $LASTEXITCODE
 } finally {

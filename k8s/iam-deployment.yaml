@@ -1,0 +1,200 @@
+# FILE: k8s/iam-deployment.yaml
+# RUOLO: Identity Zone — IAM isolato con chiave privata EdDSA (Ed25519), TLS interno e zero PII clinica (V1/Q2).
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diabetes-iam-api
+  namespace: default
+  labels:
+    app: diabetes-iam-api
+    zone: identity
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: diabetes-iam-api
+  template:
+    metadata:
+      labels:
+        app: diabetes-iam-api
+        zone: identity
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - diabetes-iam-api
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: iam-api
+          image: diabetes-saas-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - uvicorn
+            - saas_app.main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8001"
+            - --workers
+            - "1"
+            - --ssl-certfile
+            - /etc/internal-tls/tls.crt
+            - --ssl-keyfile
+            - /etc/internal-tls/tls.key
+          ports:
+            - containerPort: 8001
+              name: https
+          env:
+            - name: PORT
+              value: "8001"
+            - name: HOST
+              value: "0.0.0.0"
+            - name: SAAS_ENV
+              value: "production"
+            - name: SERVICE_MODE
+              value: "iam"
+            - name: COOKIE_SECURE
+              value: "true"
+            - name: JWT_EXPIRE_MINUTES
+              value: "10"
+            - name: REDIS_CA_CERT_PATH
+              value: "/etc/internal-ca/ca.crt"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: iam-secrets
+                  key: DATABASE_URL
+            - name: JWT_PRIVATE_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: iam-secrets
+                  key: JWT_PRIVATE_KEY_PEM
+            - name: JWT_PUBLIC_KEY_PEM
+              valueFrom:
+                configMapKeyRef:
+                  name: iam-jwt-public
+                  key: JWT_PUBLIC_KEY_PEM
+            - name: IAM_PROVISION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: iam-secrets
+                  key: IAM_PROVISION_TOKEN
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: iam-secrets
+                  key: REDIS_URL
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: internal-tls
+              mountPath: /etc/internal-tls
+              readOnly: true
+            - name: internal-ca
+              mountPath: /etc/internal-ca
+              readOnly: true
+            - name: pg-ca
+              mountPath: /etc/pg-ca
+              readOnly: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "350m"
+              memory: "256Mi"
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+              scheme: HTTPS
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: 8001
+              scheme: HTTPS
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: internal-tls
+          secret:
+            secretName: iam-internal-tls
+        - name: internal-ca
+          configMap:
+            name: internal-ca
+        - name: pg-ca
+          secret:
+            secretName: diabetes-pg-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: diabetes-iam-service
+  namespace: default
+  labels:
+    app: diabetes-iam-api
+    zone: identity
+spec:
+  type: ClusterIP
+  selector:
+    app: diabetes-iam-api
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8001
+      protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: diabetes-iam-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: diabetes-iam-api

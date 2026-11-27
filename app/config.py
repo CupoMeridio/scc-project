@@ -31,6 +31,14 @@ class Settings:
     # Percorso del file JSON contenente metadati (versione, hash SHA256, parametri di normalizzazione).
     METADATA_PATH: str = os.getenv("METADATA_PATH", "model/model_metadata.json")
 
+    # Data Zone Model Repository (opzionale in locale/test, obbligatorio su Kubernetes):
+    # se impostato, i pod ML scaricano all'avvio la versione Champion attiva in MODEL_CACHE_DIR
+    # verificando l'integrità SHA-256 (comportamento fail-closed puro).
+    MODEL_REPO_URL: str = os.getenv("MODEL_REPO_URL", "")
+    MODEL_CACHE_DIR: str = os.getenv("MODEL_CACHE_DIR", "/tmp/active_model")  # nosec B108 - /tmp è emptyDir in readOnlyRootFilesystem
+    MODEL_CA_CERT_PATH: str = os.getenv("MODEL_CA_CERT_PATH", "")
+    MODEL_SIGNING_PUBLIC_KEY_PEM: str = os.getenv("MODEL_SIGNING_PUBLIC_KEY_PEM", "").replace("\\n", "\n")
+
     # NOTA: non esiste una modalità "mock". L'applicazione serve esclusivamente il modello ONNX reale:
     # se l'artefatto o i parametri di normalizzazione mancano, /ready e /predict rispondono 503.
 

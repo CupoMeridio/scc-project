@@ -1,0 +1,13 @@
+# Runtime dependencies for Training Zone CronJob (Dockerfile.trainer)
+# Rigenerazione dentro python:3.14.10-slim con indice PyTorch CPU:
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras --extra-index-url https://download.pytorch.org/whl/cpu \
+#     --output-file=requirements-trainer.lock requirements-trainer.txt
+torch==2.15.0+cpu
+onnx==1.23.2
+onnxruntime==1.32.0
+numpy==2.5.5
+pandas==3.1.1
+psycopg-binary==3.3.9
+psycopg==3.3.9
+httpx==0.29.0
+cryptography>=50.0.2

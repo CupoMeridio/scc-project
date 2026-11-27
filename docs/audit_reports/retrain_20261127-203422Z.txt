@@ -1,0 +1,15 @@
+=== Model Retrain & Champion/Challenger Report (V3/V4) ===
+Date (UTC): 2026-11-27T20:36:00+00:00
+Command: kubectl create job --from=cronjob/diabetes-model-trainer diabetes-model-trainer-manual
+--- ML Deployment After Job ---
+NAME                       READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES               SELECTOR
+diabetes-forecasting-api   3/3     3            3           14m   api          diabetes-api:1.0.0   app=diabetes-forecasting-api
+--- Trainer Job Logs ---
+2026-11-27 20:34:43,526 [INFO] training-zone: Training Zone (trained_until=2020-01-01T00:00:00+00:00, demo dati simulati se >2020): lette 1738 righe -> finestre train=319, val=23, test=153 (tot=495)
+2026-11-27 20:34:45,190 [INFO] training-zone: Champion attuale (1.0.0): RMSE=1.3672 mmol/L | MAE=1.0780 | RiskAcc=71.24%
+/home/appuser/.local/lib/python3.14/site-packages/torch/onnx/_internal/torchscript_exporter/symbolic_opset9.py:4496: UserWarning: Exporting a model to ONNX with a batch_size other than 1, with a variable length with LSTM can cause an error when running the ONNX model with a different batch size. Make sure to save the model with a batch size of 1, or define the initial states (h0/c0) as inputs of the model. 
+  return _generic_rnn(
+2026-11-27 20:35:55,839 [INFO] training-zone: Challenger candidato (1.0.1): RMSE=1.7493 mmol/L | MAE=1.4042 | RiskAcc=62.09%
+2026-11-27 20:35:55,880 [INFO] training-zone: Bootstrap 95% CI (n=153): ΔRMSE=-0.3821 [-0.4853, -0.2755] mmol/L | ΔAcc=-0.0915 [-0.1634, -0.0131]
+2026-11-27 20:35:55,880 [INFO] training-zone: Challenger NON promosso (IC 95%% o soglie puntuali non superate).
+2026-11-27 20:35:55,881 [INFO] training-zone: Esito job di retraining: kept_champion

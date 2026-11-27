@@ -1,0 +1,21 @@
+=== V1 Live E2E & Stateless IAM Resilience Verification ===
+Date (UTC): 2026-11-27T20:48:08+00:00
+Patient login -> 200
+{"meal_id":443,"declared_at":"2026-11-27T20:48:09.230479Z","carbs_g":45.0,"diet_carb_limit_g":60.0,"current_glucose_mmol_l":null,"current_glucose_mg_dl":null,"forecasted_glucose_mmol_l":null,"forecasted_glucose_mg_dl":null,"risk_class":null,"outcome_code":"NO_RECENT_DATA","outcome_message":"Dati del sensore non recenti: misura la glicemia con il metodo abituale e contatta il medico se necessario.","doctor_flag":true,"model_version":"none"}
+Patient meal -> 200
+Doctor login -> 200
+Manager login -> 200
+deployment.apps/diabetes-iam-api scaled
+pod/diabetes-iam-api-5595bb6b86-ctjwl condition met
+pod/diabetes-iam-api-5595bb6b86-tfr7d condition met
+IAM availableReplicas after scale=0: 
+Patient meal with IAM=0 -> 200
+Doctor patients with IAM=0 -> 200
+Manager dashboard with IAM=0 -> 200
+deployment.apps/diabetes-iam-api scaled
+Waiting for deployment spec update to be observed...
+Waiting for deployment "diabetes-iam-api" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "diabetes-iam-api" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "diabetes-iam-api" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "diabetes-iam-api" rollout to finish: 1 of 2 updated replicas are available...
+deployment "diabetes-iam-api" successfully rolled out

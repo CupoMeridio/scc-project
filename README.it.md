@@ -31,20 +31,28 @@
 > L'infrastruttura Cloud (cluster KinD multi-nodo, Dockerfile multi-stage non-root, Ingress NGINX con Rate Limiting, politiche di sicurezza Kubernetes, stress test `wrk` e script di deployment e validazione automatizzati pronti per l'integrazione CI/CD) è **completamente disaccoppiata dal tipo di modello**. 
 > Qualora venga confermata l'Opzione 1 oppure assegnata l'Opzione 2 (Parkinson) o 3 (Alzheimer), l'**infrastruttura rimarrà identica al 100%**: risulterà sufficiente sostituire l'artefatto compilato `model/model.onnx` e aggiornare lo schema Pydantic per le nuove feature.
 
-### Mappa dell'Architettura: dai Dati alla Risposta (Single-Center Multi-Role SaaS)
+### Mappa dell'Architettura: Separazione a Zone e Minimo Privilegio (`attach/arch.pdf`)
 
 ```text
 Browser / Utente (Paziente, Diabetologo, Center Manager)
         ↓ HTTPS obbligatorio (redirect 308 da HTTP)
-Ingress NGINX (TLS, Rate Limiting, Header OWASP)
-   ├── "/"               ──▶ Frontend (2 repliche NGINX non-root, HTML/CSS/JS + Chart.js locale)
-   └── "/api/*"          ──▶ SaaS API (2 repliche FastAPI: IAM Cookie HttpOnly, RBAC, Audit atomico)
-                               ├──▶ Redis Queue ──▶ Ingestion Worker (2 repliche) ──┐
-                               ├──▶ PostgreSQL HA (CloudNativePG Primary + Standby) ◀┘
-                               └──▶ ML Inference Service (ClusterIP interno, 3 repliche ONNX)
+Ingress NGINX (Gateway: TLS, Rate Limiting, Path-Based Routing)
+   ├── "/"                     ──▶ Frontend (2 repliche NGINX non-root, HTML/CSS/JS + Chart.js locale)
+   ├── "/api/auth/*"           ──▶ IAM Zone (`diabetes-iam-api`, 2 repliche, ruolo `saas_iam`, firma Ed25519)
+   ├── "/api/patient|doctor/*" ──▶ Clinical Zone (`diabetes-clinical-api`, 2 repliche, ruolo `saas_clinical`)
+   │                                  ├──▶ Verifica locale JWT EdDSA + Redis `revocation_ro` (TLS)
+   │                                  └──▶ ML Inference (`diabetes-forecasting-service`, 3–6 repliche via HPA, HTTPS)
+   └── "/api/manager/*"        ──▶ Manager Zone (`diabetes-manager-api`, 2 repliche, ruolo `saas_manager` su viste SQL)
+
+Solo Interni (NON esposti da Ingress):
+   ├── CGM Ingestion (`diabetes-ingest-service`, ruolo `saas_ingest`) ──▶ Coda Redis (`rediss://`) ──▶ Worker (`saas_worker`) ──┐
+   ├── PostgreSQL HA (CNPG Primary + Standby, `verify-full` + `pg_dump` cifrato X25519/HKDF-SHA256/AES-256-GCM)              ◀┘
+   └── Training Zone CronJob (`diabetes-model-trainer`, ruolo `saas_trainer` su `v_training_cgm_series`)
+          └── Gate Champion/Challenger ──▶ Model Repository (`diabetes-model-repo`, PVC + SHA-256 + firma Ed25519)
+                                              └──▶ Sync Fail-Closed + Rolling Restart su `diabetes-forecasting-api`
 ```
 
-Il gateway **Ingress NGINX** espone verso l'esterno solo il portale web (`/`) e le API autenticate (`/api/*`), forzando HTTPS (`ssl-redirect: "true"` + `force-ssl-redirect: "true"`). Il microservizio ML (`diabetes-forecasting-service`, 3 repliche con `podAntiAffinity` e `PDB`) resta **strettamente interno al cluster** e protetto da **NetworkPolicy `default-deny` + allowlist**. L'ingestione CGM (`/api/cgm/ingest`) accoda su **Redis** (`202 Accepted`) e viene svuotata in modo idempotente da 2 repliche di **Ingestion Worker** verso **PostgreSQL HA (Primary + Standby sincrona via CloudNativePG, con backup giornalieri `pg_dump`)**. La coda usa una lista in-flight con ack esplicito, retry e dead-letter queue: i campioni non si perdono se un worker crasha. Schema e popolamento iniziale girano tramite **Alembic** dentro un **Kubernetes Job** dedicato (`k8s/seed-job.yaml`).
+Il gateway **Ingress NGINX** espone verso l'esterno solo il portale statico (`/`) e le zone API separate (`/api/auth/*`, `/api/patient/*`, `/api/doctor/*`, `/api/manager/*`), forzando HTTPS (`ssl-redirect: "true"` + `force-ssl-redirect: "true"`, `backend-protocol: HTTPS`). Clinical e Manager verificano localmente i JWT **EdDSA (Ed25519)** e controllano la revoca (`jti`/`pwdv`) su Redis ACL in sola lettura (`revocation_ro` su `rediss://`); la zona Manager non ha alcun accesso di rete né credenziali verso IAM. Ogni zona è isolata da **NetworkPolicy `default-deny` + allowlist** per zona e usa un proprio ruolo PostgreSQL dedicato (`saas_iam`, `saas_clinical`, `saas_manager`, `saas_ingest`, `saas_worker`, `saas_trainer`): `saas_manager` legge solo viste aggregate (`v_manager_*`), e `saas_trainer` legge solo la vista pseudonimizzata (`v_training_cgm_series` con SHA-256 + salt). Il **Model Repository** distribuisce i pesi Champion ONNX su PVC con verifica SHA-256 + firma Ed25519 e sync **fail-closed** sulle repliche ML (3–6 pod scalati da Kubernetes `HorizontalPodAutoscaler` con `podAntiAffinity` e `PDB`). I backup giornalieri `pg_dump` usano cifratura asimmetrica autenticata (**X25519 + HKDF-SHA256 + AES-256-GCM**, con chiave privata custodita fuori cluster). Vedi [Mappa di corrispondenza architettura](docs/mappa_architettura.md).
 
 ---
 
@@ -71,6 +79,7 @@ Assicurarsi che l'ambiente host soddisfi i seguenti requisiti tecnici prima dell
 * **Su Linux:** Shell Bash, `make`, `git`, `curl` e `sudo`. Lo script `make setup` usa APT e il repository Debian 13 (Trixie); su Ubuntu, Fedora e altre distribuzioni occorre installare i prerequisiti con il gestore di pacchetti appropriato.
 * **Su macOS:** Homebrew, Bash, `make`, `git` e `curl`. `make setup` installa Docker Desktop, KinD, kubectl, `wrk`, `jq` e Python 3.
 * **Su Windows (10/11):** **Docker Desktop** attivo con backend WSL2 abilitato e shell **PowerShell**.
+* **Per gli ambienti Python locali:** Python **3.14** con supporto `venv` deve essere disponibile (`python3.14` su Linux/macOS, `py -3.14` su Windows). Le immagini Docker includono già il runtime Python 3.14.
 
 ---
 
@@ -124,17 +133,12 @@ make build
 make scan
 ```
 
-#### Passo 6: Avvio del Cluster Kubernetes KinD (Task F)
-Inizializzazione del cluster locale a 3 nodi (1 master + 2 worker) e applicazione dell'Ingress Controller NGINX:
-```bash
-make cluster-up
-```
-
-#### Passo 7: Deployment dell'applicazione sul Cluster (Task H)
-Caricamento dell'immagine locale nei nodi KinD e rilascio del deployment a 3 repliche:
+#### Passo 6: Deployment completo da zero (Task F + H)
+Il comando compila le immagini, **elimina l'eventuale cluster KinD esistente e tutti i suoi dati** (database, PVC, Secret), quindi ricrea il cluster a 3 nodi, installa NGINX Ingress e distribuisce l'applicazione:
 ```bash
 make deploy
 ```
+`make cluster-up` resta disponibile per dimostrare separatamente il Task F; non va eseguito prima di `make deploy`, perché il deploy ricrea il cluster.
 
 #### Passo 8: Verifica degli Endpoint e Portale Web HTTPS
 Verifica diretta dell'isolamento Ingress, redirect HTTPS e salute SaaS da riga di comando:
@@ -153,13 +157,10 @@ make simulate-cgm
 ```
 `/api/cgm/ingest` è un endpoint **interno** (D2): non è raggiungibile tramite l'Ingress, quindi l'ingestione deve passare da un port-forward e richiede una chiave per dispositivo inviata nell'header `X-Device-Key`. La chiave è nel Secret `device-keys` creato dal Job di seed (una voce per paziente, decisione N1/Q3):
 ```bash
-# In un terminale, apri il port-forward verso il servizio SaaS:
-kubectl port-forward svc/diabetes-saas-service 8080:80
+# In un terminale, apri il port-forward verso il servizio Ingest:
+kubectl port-forward svc/diabetes-ingest-service 8080:80
 # In un altro terminale, invia i campioni con la chiave del paziente:
 make simulate-cgm-ingest PATIENT=591
-# Oppure manualmente:
-python scripts/simulate_cgm_patient.py --ingest --endpoint http://127.0.0.1:8080/predict --patient 591 \
-  --device-key "$(kubectl get secret device-keys -o jsonpath='{.data.patient_591}' | base64 -d)"
 ```
 Su Windows, `scripts/simulate_cgm_ingest.ps1` esegue lo stesso flusso (legge la chiave dal Secret, apre il port-forward ed esegue il simulatore).
 
@@ -204,7 +205,7 @@ make test
 ```
 
 #### Passo 3: Build e deployment
-Usare gli stessi comandi Make del workflow Linux per build, deployment KinD e stress test:
+Usare gli stessi comandi Make del workflow Linux per build, deployment distruttivo da zero su KinD e stress test:
 ```bash
 make build
 make scan
@@ -234,11 +235,13 @@ Predisposizione automatica del virtual environment:
 docker build -t diabetes-api:1.0.0 -f docker/Dockerfile .
 docker build -t diabetes-saas-api:1.0.0 -f docker/Dockerfile.saas .
 docker build -t diabetes-frontend:1.0.0 -f docker/Dockerfile.frontend .
+docker build -t diabetes-trainer:1.0.0 -f docker/Dockerfile.trainer .
 docker scout quickview diabetes-api:1.0.0
 docker scout cves diabetes-api:1.0.0
 ```
 
 #### Passo 4: Deployment Automatico sul Cluster
+**Attenzione:** lo script elimina il cluster KinD esistente e tutti i suoi dati prima di ricrearlo.
 ```powershell
 .\scripts\deploy_k8s.ps1
 ```
@@ -289,7 +292,7 @@ La traccia definisce finestre operative differenti a seconda del progetto scelto
 | Controllo di Sicurezza | Modello di Minaccia & Motivazione | Meccanismo di Implementazione |
 | :--- | :--- | :--- |
 | **Container Non-Root** | Previene Container Breakout ed escalation dei privilegi sul nodo host. | `USER 10001:10001` (`101` per NGINX unprivileged), `runAsNonRoot: true`, `readOnlyRootFilesystem: true`. |
-| **Multi-Stage Build** | Riduce la superficie d'attacco; compilatori e strumenti di build sono esclusi dall'immagine finale. | Dockerfile a doppio stadio (`builder` -> `runner`), base image fissata per digest (`python:3.11.11-slim@sha256:081075da…`). |
+| **Multi-Stage Build** | Riduce la superficie d'attacco; compilatori e strumenti di build sono esclusi dall'immagine finale. | Dockerfile a doppio stadio (`builder` -> `runner`), base image fissata per digest (`python:3.14.10-slim@sha256:22eafb37…`). |
 | **Scansione CVE con Docker Scout** | Identifica Common Vulnerabilities and Exposures nel sistema operativo e nelle librerie Python prima del rilascio. | `docker scout cves` & `docker scout quickview` (salvati in `docs/audit_reports/`). |
 | **Rate Limiting** | Previene attacchi Denial of Service (DoS) e garantisce la corretta ripartizione della capacità tra client concorrenti. | `nginx.ingress.kubernetes.io/limit-rps: "1000"`, `limit-burst-multiplier: "5"`. |
 | **Connection Limiting** | Mitiga attacchi Slowloris e l'esaurimento della tabella dei socket/connessioni sul gateway. | `nginx.ingress.kubernetes.io/limit-connections: "150"`. |
@@ -334,49 +337,13 @@ scc-project/
 ├── requirements-test.txt    # Dipendenze per la suite di test (pytest, httpx)
 ├── common/
 │   └── __init__.py          # Costanti cliniche condivise (CLASS_BINS, classify_glucose)
-├── app/
-│   ├── main.py              # Microservizio interno di inferenza ONNX fail-closed
-│   ├── config.py            # Configurazioni Twelve-Factor App
-│   └── schemas.py           # Validazione Pydantic v2 (serie glicemica + esogeni Hovorka)
-├── saas_app/
-│   ├── main.py              # Backend SaaS RBAC (cookie HttpOnly, fail-fast secret, CSP/HSTS)
-│   ├── auth.py              # IAM JWT + revoca JTI + rate limiter + audit atomico
-│   ├── clinical.py          # Validazione risposta ML, profilo bolo, mapping RF06/RF07 con target
-│   ├── repositories.py      # Accesso dati SQLAlchemy / idempotenza CGM
-│   ├── services/            # Layer di dominio (patient, doctor, manager, ingestion)
-│   ├── routers/             # Router HTTP sottili (auth, patient, doctor, manager, ingestion)
-│   └── seed_cli.py          # CLI dedicata per il Seed Job iniziale
-├── frontend/
-│   ├── index.html           # Pagina di Login (nessuna credenziale hardcoded)
-│   ├── patient.html         # Dashboard Paziente (dichiarazione pasti + storico week/month/year)
-│   ├── doctor.html          # Dashboard Diabetologo (pazienti assegnati, trend, diete, interventi)
-│   ├── manager.html         # Dashboard Center Manager (statistiche aggregate + stato pod SLA)
-│   └── nginx.conf           # Server statico non-root con CSP 'self' e 404 rigoroso
-├── model/
-│   ├── train_lstm.py        # Script addestramento offline ed export ONNX
-│   ├── model_metadata.json  # Metadati, scaler e checksum SHA256
-│   ├── model.onnx           # Grafo ONNX
-│   └── model.onnx.data      # Pesi esterni ONNX
-├── docker/
-│   ├── Dockerfile           # Runtime ML non-root UID 10001 (base pinnata per digest)
-│   ├── Dockerfile.saas      # Immagine unica SaaS API + Worker + Seed Job (comandi diversi, P7)
-│   └── Dockerfile.frontend  # Frontend NGINX unprivileged UID 101 (base pinnata per digest)
-├── k8s/
-│   ├── kind-config.yaml     # Topologia 1 Control-Plane + 2 Worker KinD
-│   ├── postgres-ha.yaml     # Cluster PostgreSQL HA (CloudNativePG: 1 Primary + 1 Standby)
-│   ├── redis.yaml           # Coda asincrona Redis 7.4 per ingestione CGM
-│   ├── ingestion-worker-deployment.yaml # 2 repliche Worker consumo coda CGM -> PostgreSQL HA
-│   ├── seed-job.yaml        # Job one-shot migrazioni Alembic + seed OhioT1DM
-│   ├── deployment.yaml      # 3 repliche ML (:1.0.0) con startup/liveness/readiness probe
-│   ├── saas-deployment.yaml # 2 repliche SaaS (:1.0.0) con fail-fast secret
-│   ├── frontend-deployment.yaml # 2 repliche Frontend (:1.0.0)
-│   ├── pdb.yaml / saas-pdb.yaml / frontend-pdb.yaml
-│   ├── service.yaml / ml-headless-service.yaml / saas-service.yaml / frontend-service.yaml
-│   ├── networkpolicy.yaml   # Firewall interno default-deny + allowlist esplicita per zona
-│   └── ingress.yaml         # NGINX Ingress HTTPS obbligatorio (/ e /api)
-├── tests/
-│   ├── test_api.py          # Test automatizzati API ML
-│   └── test_saas_api.py     # Test automatizzati IAM, cookie, revoca, RBAC, clinica e ingestion
+├── app/                     # Microservizio interno di inferenza ONNX fail-closed (`MODEL_REPO_URL`)
+├── saas_app/                # Servizi isolati per zona (`SERVICE_MODE=iam|clinical|manager|ingest`), `iam_client`, `model_repo`, Worker e seed Alembic
+├── frontend/                # Portale HTML/CSS/JS classico + Chart.js locale + NGINX non-root
+├── model/                   # Training LSTM offline, pipeline Champion/Challenger `retrain_pipeline.py`, metadati e ONNX
+├── docker/                  # Dockerfile multi-stage non-root (`ML`, `SaaS/Repo/Worker/Seed`, `Frontend`, `Trainer`)
+├── k8s/                     # Topologia KinD, CNPG HA, CronJob `pg_dump` cifrato, Redis, Model Repo PVC, Training CronJob, 4 Deployment SaaS isolati, HPA (3–6), PDB, NetworkPolicy per zona, Ingress
+├── tests/                   # Test automatizzati (`test_api.py`, `test_saas_api.py`, `test_zone_architecture.py`, `test_simulate_cgm_ingest.py`)
 └── scripts/                 # Provisioning, deploy KinD, simulatore CGM e benchmark wrk interno
 ```
 
@@ -392,8 +359,8 @@ Su macOS è disponibile il profilo CPU; il rilevamento `auto` seleziona `cpu-tra
 | Profilo | Dipendenze Installate | Dimensione | Scopo e Utilizzo |
 | :--- | :--- | :--- | :--- |
 | **`cpu-minimal`** | FastAPI, ONNX Runtime, Pydantic, uvicorn, onnx, pytest, httpx. **Zero PyTorch**. | **~100 MB** | Validazione rapida dell'API, build Docker, probe di liveness/readiness e cluster serving. |
-| **`cpu-train`**<br>*(Consigliato)* | Tutto di `cpu-minimal` + PyTorch (wheel CPU su Linux, distribuzione standard su macOS) + scikit-learn + pandas. | **~350 MB** | **Profilo di riferimento per l'esame**: addestramento CPU su Linux e macOS. |
-| **`gpu-cuda`** | Tutto di `cpu-minimal` + **PyTorch completo con NVIDIA CUDA 12.4** + torchvision + torchaudio. | **~2.5 GB** | Attivazione per ambienti dotati di GPU **NVIDIA** con supporto CUDA. |
+| **`cpu-train`**<br>*(Consigliato)* | Tutto di `cpu-minimal` + PyTorch CPU, ONNX, NumPy e pandas. | Variabile | **Profilo di riferimento per l'esame**: addestramento CPU su Linux e macOS. |
+| **`gpu-cuda`** | Tutto di `cpu-minimal` + **PyTorch con NVIDIA CUDA 13.0**. | Grande | Attivazione per ambienti dotati di GPU **NVIDIA** compatibili. |
 | **`gpu-rocm`** | Su Linux: PyTorch con ROCm secondo quanto supportato dallo script. Su Windows: al momento installa PyTorch CPU, non ROCm. | Variabile | Usare l'accelerazione ROCm solo su piattaforme esplicitamente supportate; la rilevazione di una GPU AMD su Windows non attiva l'accelerazione. |
 | **`auto`** | Rilevamento automatico GPU su Linux; seleziona `cpu-train` su macOS. | Dinamica | **Selezione del profilo adatta alla piattaforma**. |
 

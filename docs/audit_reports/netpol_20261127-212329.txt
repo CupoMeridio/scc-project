@@ -1,0 +1,82 @@
+=== Verifica enforcement NetworkPolicy per Zone | 2026-11-27T21:23:29+01:00 | namespace=default ===
+
+[+] Versione kind:
+kind v0.25.0 go1.22.9 linux/amd64
+
+[+] Pod in kube-system (identificazione CNI):
+NAME                                                READY   STATUS    RESTARTS   AGE   IP           NODE                        NOMINATED NODE   READINESS GATES
+coredns-7c65d6cfc9-mhcbr                            1/1     Running   0          19m   10.244.0.2   scc-cluster-control-plane   <none>           <none>
+coredns-7c65d6cfc9-xhd7t                            1/1     Running   0          19m   10.244.0.4   scc-cluster-control-plane   <none>           <none>
+etcd-scc-cluster-control-plane                      1/1     Running   0          19m   172.18.0.2   scc-cluster-control-plane   <none>           <none>
+kindnet-jd6m4                                       1/1     Running   0          18m   172.18.0.3   scc-cluster-worker2         <none>           <none>
+kindnet-k7h25                                       1/1     Running   0          18m   172.18.0.4   scc-cluster-worker          <none>           <none>
+kindnet-vv95x                                       1/1     Running   0          18m   172.18.0.2   scc-cluster-control-plane   <none>           <none>
+kube-apiserver-scc-cluster-control-plane            1/1     Running   0          19m   172.18.0.2   scc-cluster-control-plane   <none>           <none>
+kube-controller-manager-scc-cluster-control-plane   1/1     Running   0          19m   172.18.0.2   scc-cluster-control-plane   <none>           <none>
+kube-proxy-5z65r                                    1/1     Running   0          19m   172.18.0.2   scc-cluster-control-plane   <none>           <none>
+kube-proxy-8qwwr                                    1/1     Running   0          18m   172.18.0.4   scc-cluster-worker          <none>           <none>
+kube-proxy-wdfpf                                    1/1     Running   0          18m   172.18.0.3   scc-cluster-worker2         <none>           <none>
+kube-scheduler-scc-cluster-control-plane            1/1     Running   0          19m   172.18.0.2   scc-cluster-control-plane   <none>           <none>
+metrics-server-587b667b55-wnhkf                     1/1     Running   0          10m   10.244.2.3   scc-cluster-worker          <none>           <none>
+
+[+] CNI riconosciuto:
+kindnet-jd6m4                                       1/1   Running   0     18m
+kindnet-k7h25                                       1/1   Running   0     18m
+kindnet-vv95x                                       1/1   Running   0     18m
+
+[+] Step 0b: verifica IP cablati in k8s/networkpolicy.yaml...
+    kube-apiserver ClusterIP rilevato: 10.96.0.1
+    rete docker kind rilevata (IPv4): 172.18.0.0/16
+    [OK] 10.96.0.1/32 presente in k8s/networkpolicy.yaml.
+    [OK] 172.18.0.0/16 presente in k8s/networkpolicy.yaml.
+
+[+] Step 1: pod NON autorizzato (nessuna label) - tutte le connessioni dirette devono FALLIRE...
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+UNAUTH BLOCKED 10.244.1.10:6379
+UNAUTH BLOCKED 10.244.2.6:5432
+UNAUTH BLOCKED 10.244.2.23:8000
+UNAUTH BLOCKED 10.244.2.8:8002
+UNAUTH BLOCKED 10.244.1.21:8001
+UNAUTH SUMMARY reachable=0 blocked=5
+pod "np-test-unauth" deleted from default namespace
+    [OK] tutte e 5 le connessioni dirette bloccate dal CNI.
+
+[+] Probe zona 'diabetes-clinical-api'...
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+ALLOW OK diabetes-iam-service:443
+ALLOW OK diabetes-pg-rw:5432
+ALLOW OK diabetes-forecasting-service:443
+ALLOW OK redis-service:6379
+DENY BLOCKED diabetes-model-repo:443
+ZONE SUMMARY allow_ok=4 allow_fail=0 deny_ok=1 deny_fail=0
+pod "np-test-clinical" deleted from default namespace
+    [OK] diabetes-clinical-api: ZONE SUMMARY allow_ok=4 allow_fail=0 deny_ok=1 deny_fail=0
+
+[+] Probe zona 'diabetes-manager-api'...
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+ALLOW OK diabetes-pg-rw:5432
+ALLOW OK diabetes-forecasting-service:443
+ALLOW OK redis-service:6379
+DENY BLOCKED diabetes-iam-service:443
+DENY BLOCKED diabetes-model-repo:443
+ZONE SUMMARY allow_ok=3 allow_fail=0 deny_ok=2 deny_fail=0
+pod "np-test-manager" deleted from default namespace
+    [OK] diabetes-manager-api: ZONE SUMMARY allow_ok=3 allow_fail=0 deny_ok=2 deny_fail=0
+
+[+] Probe zona 'diabetes-model-trainer'...
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+ALLOW OK diabetes-pg-rw:5432
+ALLOW OK diabetes-model-repo:443
+DENY BLOCKED redis-service:6379
+DENY BLOCKED diabetes-iam-service:443
+DENY BLOCKED diabetes-forecasting-service:443
+ZONE SUMMARY allow_ok=2 allow_fail=0 deny_ok=3 deny_fail=0
+pod "np-test-trainer" deleted from default namespace
+    [OK] diabetes-model-trainer: ZONE SUMMARY allow_ok=2 allow_fail=0 deny_ok=3 deny_fail=0
+
+[✓] NetworkPolicy per zone enforce correttamente su default.
+[✓] Report salvato in docs/audit_reports/netpol_20261127-212329.txt.

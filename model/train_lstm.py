@@ -24,11 +24,13 @@ OBIETTIVO CLINICO:
 
 import os         # Modulo standard per la manipolazione di cartelle e percorsi nel filesystem
 import glob       # Ricerca di file su disco tramite pattern (es. trova tutti i CSV dei pazienti)
+import inspect    # Ispezione firma torch.onnx.export (compatibilità PyTorch >=2.9 dynamo=False)
 import json       # Serializzazione e salvataggio dei metadati e dei parametri di normalizzazione
 import hashlib    # Funzioni di hashing crittografico (SHA-256) per l'integrità e audit del modello
 import datetime   # Generazione di timestamp per tracciare la data esatta di addestramento
 import argparse   # Gestione dei parametri passati da riga di comando (es. --epochs, --data)
 from pathlib import Path # Gestione object-oriented dei percorsi su Windows/Linux/macOS
+from typing import Any, Dict
 
 import numpy as np  # Libreria fondamentale per il calcolo scientifico e la manipolazione di tensori
 import pandas as pd # Manipolazione e analisi strutturata di dati tabulari (DataFrames)
@@ -104,6 +106,36 @@ def to_class(glucose_mmol: np.ndarray) -> np.ndarray:
     Aggiungendo 1, mappiamo direttamente gli indici da 0..6 a 1..7.
     """
     return np.digitize(glucose_mmol, BINS[1:-1]) + 1
+
+
+def export_onnx_model(
+    model: nn.Module,
+    dummy_seq: torch.Tensor,
+    dummy_exog: torch.Tensor,
+    onnx_path: str,
+) -> None:
+    """Esporta la rete LSTM in formato ONNX (opset 18, compatibile con PyTorch <2.5 e >=2.9)."""
+    model.eval()
+    extra_kwargs: Dict[str, Any] = {}
+    if "dynamo" in inspect.signature(torch.onnx.export).parameters:
+        # PyTorch 2.9+ imposta dynamo=True di default (richiede onnxscript non incluso nel trainer).
+        extra_kwargs["dynamo"] = False
+    torch.onnx.export(
+        model,
+        (dummy_seq, dummy_exog),
+        onnx_path,
+        export_params=True,
+        opset_version=18,
+        do_constant_folding=True,
+        input_names=["seq", "exog"],
+        output_names=["delta_glucose"],
+        dynamic_axes={
+            "seq": {0: "batch_size"},
+            "exog": {0: "batch_size"},
+            "delta_glucose": {0: "batch_size"},
+        },
+        **extra_kwargs,
+    )
 
 
 def compute_sha256(filepath: str) -> str:
@@ -512,27 +544,8 @@ def run_training_pipeline(data_dir: str, epochs: int, output_dir: str, batch_siz
     
     # torch.onnx.export:
     # - (dummy_seq, dummy_exog): tuple con i due ingressi richiesti dal metodo forward()
-    # - input_names: nomi simbolici usati dalla Web App per passare i dati al runtime
-    # - output_names: nome simbolico della variabile di uscita
-    # - opset_version: impostata esplicitamente a 18 in accordo con gli operatori esportati
-    #   dal compilatore PyTorch, pienamente supportati dal motore runtime di inferenza C++.
-    # - dynamic_axes: consente a ONNX di accettare batch di qualsiasi dimensione
-    #   (es. 1 paziente per richiesta singola o centinaia di richieste concorrenti nei carichi di picco)
-    torch.onnx.export(
-        model,
-        (dummy_seq, dummy_exog),
-        onnx_path,
-        export_params=True,
-        opset_version=18,
-        do_constant_folding=True, # Ottimizza il grafo pre-calcolando nodi costanti
-        input_names=["seq", "exog"],
-        output_names=["delta_glucose"],
-        dynamic_axes={
-            "seq": {0: "batch_size"},
-            "exog": {0: "batch_size"},
-            "delta_glucose": {0: "batch_size"}
-        }
-    )
+    # - input_names/output_names/dynamic_axes: contratto grafo ONNX (opset 18).
+    export_onnx_model(model, dummy_seq, dummy_exog, onnx_path)
     print(f"[✓] Modello ONNX esportato con successo: {onnx_path}")
     
     # Calcolo dell'hash SHA256 degli artefatti per audit di sicurezza (Supply Chain Security).

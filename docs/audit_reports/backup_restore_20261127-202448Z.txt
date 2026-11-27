@@ -1,0 +1,10 @@
+=== Asymmetric Encrypted Backup & Restore Verification (V3 / V6) ===
+Date (UTC): 2026-11-27T20:24:48+00:00
+Command: ./scripts/verify_backup.sh
+[OK] Chiave privata assente dal cluster (solo BACKUP_PUBLIC_KEY_B64 in pg-backup-public).
+[✓] Backup cifrato autenticato scritto: /backups/diabetes_saas_20261127T202534Z.dump.enc
+[OK] Estratto /backups/diabetes_saas_20261127T202534Z.dump.enc (71346 bytes).
+[OK] Manomissione backup cifrato rifiutata (InvalidTag).
+Source row counts (users|patients|cgm|meals|audit):   15|12|1728|442|0
+Restored row counts (users|patients|cgm|meals|audit): 15|12|1728|442|0
+[✓] Backup cifrato decifrato, autenticato e ripristinato con 100% parità righe. Report: docs/audit_reports/backup_restore_20261127-202448Z.txt

@@ -1,20 +1,7 @@
 # FILE: k8s/pg-backup-cronjob.yaml
-# RUOLO: Backup giornaliero del database clinico su PVC (object storage non disponibile in KinD).
-# In un datacenter reale questa responsabilità passa a un backup manager con
-# object store S3 e PITR; qui manteniamo dump compressi con ritenzione di 7 giorni.
-#
-# LIMITI DICHIARATI (P12, ambiente di laboratorio KinD):
-#  - I dump NON sono cifrati a riposo: sono protetti solo dai permessi del PVC e
-#    dal fatto che il volume non è esposto fuori dal cluster. In produzione servono
-#    cifratura lato client (es. `age`/GPG) e chiavi gestite da un KMS.
-#  - Nessun Point-In-Time Recovery: si può ripristinare solo all'istante dell'ultimo dump.
-#  - Il ripristino è manuale e va provato: vedi il comando di restore nell'intestazione
-#    dei comandi del container e l'evidenza richiesta (D8) in docs/audit_reports/.
-# Ripristino (procedura):
-#   kubectl cp <pod-pgbackup>:/backups/<file>.dump /tmp/restore.dump
-#   kubectl exec -i diabetes-pg-1 -- pg_restore --clean --if-exists \
-#     -U saas_migrator -d diabetes_saas --no-owner < /tmp/restore.dump
-# Da eseguire su un DB di prova prima di dichiararlo verificato.
+# RUOLO: Backup giornaliero cifrato autenticato (X25519 + HKDF-SHA256 + AES-256-GCM, V6).
+#        Il cluster contiene SOLO la chiave pubblica (`pg-backup-public`): nessun pod compromesso
+#        può decifrare i backup e qualsiasi manomissione fallisce il tag GCM in decifratura.
 
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -59,7 +46,7 @@ spec:
             fsGroup: 10001
             seccompProfile:
               type: RuntimeDefault
-          containers:
+          initContainers:
             - name: pgdump
               image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
               command:
@@ -67,19 +54,57 @@ spec:
                 - -c
                 - |
                   set -eu
-                  FILE="/backups/diabetes_saas_$(date -u +%Y%m%dT%H%M%SZ).dump"
-                  PGPASSWORD="$PG_PASSWORD" pg_dump \
-                    -h diabetes-pg-rw -p 5432 -U saas_migrator -d diabetes_saas \
-                    -Fc -f "$FILE"
-                  echo "[✓] Backup scritto: $FILE"
-                  find /backups -name '*.dump' -mtime +7 -delete
+                  PGPASSWORD="$PG_PASSWORD" PGSSLMODE="verify-full" PGSSLROOTCERT="/etc/pg-ca/ca.crt" \
+                    pg_dump -h diabetes-pg-rw -p 5432 -U saas_migrator -d diabetes_saas \
+                    -Fc -f /work/raw.dump
               env:
                 - name: PG_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: saas-secrets
+                      name: migrator-secrets
                       key: POSTGRES_PASSWORD
               volumeMounts:
+                - name: work-volume
+                  mountPath: /work
+                - name: pg-ca
+                  mountPath: /etc/pg-ca
+                  readOnly: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "192Mi"
+          containers:
+            - name: encrypt-backup
+              image: diabetes-saas-api:1.0.0
+              imagePullPolicy: IfNotPresent
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  OUT="/backups/diabetes_saas_$(date -u +%Y%m%dT%H%M%SZ).dump.enc"
+                  python3 -m saas_app.backup_crypto seal --in /work/raw.dump --out "$OUT"
+                  rm -f /work/raw.dump
+                  echo "[✓] Backup cifrato autenticato scritto: $OUT"
+                  find /backups -name '*.dump.enc' -mtime +7 -delete
+              env:
+                - name: BACKUP_PUBLIC_KEY_B64
+                  valueFrom:
+                    configMapKeyRef:
+                      name: pg-backup-public
+                      key: BACKUP_PUBLIC_KEY_B64
+              volumeMounts:
+                - name: work-volume
+                  mountPath: /work
                 - name: backups
                   mountPath: /backups
               securityContext:
@@ -96,6 +121,16 @@ spec:
                   cpu: "250m"
                   memory: "192Mi"
           volumes:
+            - name: work-volume
+              emptyDir:
+                medium: Memory
+                sizeLimit: 256Mi
             - name: backups
               persistentVolumeClaim:
                 claimName: pg-backups
+            - name: pg-ca
+              secret:
+                secretName: diabetes-pg-ca
+                items:
+                  - key: ca.crt
+                    path: ca.crt

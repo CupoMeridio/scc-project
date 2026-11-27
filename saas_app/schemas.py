@@ -38,8 +38,6 @@ class ChangePasswordRequest(BaseModel):
 class UserInfo(BaseModel):
     id: int
     username: str
-    email: str
-    full_name: str
     role: Literal["patient", "doctor", "manager"]
     patient_code: Optional[str] = None
     must_change_password: bool = False

@@ -1,0 +1,12 @@
+diff --git a/k8s/vendor/ingress-nginx-controller-v1.15.1.yaml b/k8s/vendor/ingress-nginx-controller-v1.15.1.yaml
+index 14c0fec..45432e1 100644
+--- a/k8s/vendor/ingress-nginx-controller-v1.15.1.yaml
++++ b/k8s/vendor/ingress-nginx-controller-v1.15.1.yaml
+@@ -507,6 +507,7 @@ spec:
+       dnsPolicy: ClusterFirst
+       nodeSelector:
+         kubernetes.io/os: linux
++        ingress-ready: "true"
+       serviceAccountName: ingress-nginx
+       terminationGracePeriodSeconds: 0
+       tolerations:

@@ -1,0 +1,83 @@
+=== wrk Stress Test Report (D8/V2) ===
+Date (UTC): 2026-11-27T20:58:31+00:00
+Command: wrk -t4 -c25 -d30s -s /tmp/tmp.jDIXQ4Vzda.lua --latency https://localhost/api/patient/meals
+Target mode: fullpath
+--- Deployments & Replicas (Pre-Run) ---
+NAME                       READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS     IMAGES                    SELECTOR
+diabetes-forecasting-api   5/5     5            5           37m   api            diabetes-api:1.0.0        app=diabetes-forecasting-api
+diabetes-clinical-api      4/4     4            4           37m   clinical-api   diabetes-saas-api:1.0.0   app=diabetes-clinical-api
+--- HPA State (Pre-Run) ---
+NAME                       REFERENCE                             TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+diabetes-clinical-hpa      Deployment/diabetes-clinical-api      cpu: <unknown>/70%   2         4         4          36m
+diabetes-forecasting-hpa   Deployment/diabetes-forecasting-api   cpu: 5%/70%          3         6         5          36m
+diabetes-frontend-hpa      Deployment/diabetes-frontend          cpu: 2%/70%          2         4         2          36m
+diabetes-iam-hpa           Deployment/diabetes-iam-api           cpu: <unknown>/70%   2         4         2          36m
+diabetes-ingest-hpa        Deployment/diabetes-ingest-api        cpu: <unknown>/70%   2         4         2          36m
+diabetes-manager-hpa       Deployment/diabetes-manager-api       cpu: <unknown>/70%   2         4         2          36m
+--- Pod Images & Resources ---
+diabetes-clinical-api-7c559dccbf-fptpq	diabetes-saas-api:1.0.0	req={"cpu":"200m","memory":"192Mi"}	lim={"cpu":"1","memory":"512Mi"}	status=Running
+diabetes-clinical-api-7c559dccbf-hw5k7	diabetes-saas-api:1.0.0	req={"cpu":"200m","memory":"192Mi"}	lim={"cpu":"1","memory":"512Mi"}	status=Running
+diabetes-clinical-api-7c559dccbf-k9h47	diabetes-saas-api:1.0.0	req={"cpu":"200m","memory":"192Mi"}	lim={"cpu":"1","memory":"512Mi"}	status=Running
+diabetes-clinical-api-7c559dccbf-sm2z6	diabetes-saas-api:1.0.0	req={"cpu":"200m","memory":"192Mi"}	lim={"cpu":"1","memory":"512Mi"}	status=Running
+diabetes-forecasting-api-dcbc9588c-bpbbq	diabetes-api:1.0.0	req={"cpu":"100m","memory":"128Mi"}	lim={"cpu":"500m","memory":"256Mi"}	status=Running
+diabetes-forecasting-api-dcbc9588c-mw5w4	diabetes-api:1.0.0	req={"cpu":"100m","memory":"128Mi"}	lim={"cpu":"500m","memory":"256Mi"}	status=Running
+diabetes-forecasting-api-dcbc9588c-w6zgx	diabetes-api:1.0.0	req={"cpu":"100m","memory":"128Mi"}	lim={"cpu":"500m","memory":"256Mi"}	status=Running
+diabetes-forecasting-api-dcbc9588c-x52lq	diabetes-api:1.0.0	req={"cpu":"100m","memory":"128Mi"}	lim={"cpu":"500m","memory":"256Mi"}	status=Running
+diabetes-forecasting-api-dcbc9588c-xfw9j	diabetes-api:1.0.0	req={"cpu":"100m","memory":"128Mi"}	lim={"cpu":"500m","memory":"256Mi"}	status=Running
+--- Raw wrk Output ---
+Running 30s test @ https://localhost/api/patient/meals
+  4 threads and 25 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   248.94ms  172.07ms   1.26s    85.43%
+    Req/Sec    28.77     16.60    90.00     57.83%
+  Latency Distribution
+     50%  201.01ms
+     75%  296.06ms
+     90%  475.12ms
+     99%  883.76ms
+  3102 requests in 30.05s, 2.54MB read
+Requests/sec:    103.24
+Transfer/sec:     86.40KB
+--- HPA Timeline (kubectl get hpa -w) ---
+NAME                       REFERENCE                             TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+diabetes-clinical-hpa      Deployment/diabetes-clinical-api      cpu: <unknown>/70%   2         4         4          36m
+diabetes-forecasting-hpa   Deployment/diabetes-forecasting-api   cpu: 5%/70%          3         6         5          36m
+diabetes-frontend-hpa      Deployment/diabetes-frontend          cpu: 2%/70%          2         4         2          36m
+diabetes-iam-hpa           Deployment/diabetes-iam-api           cpu: <unknown>/70%   2         4         2          36m
+diabetes-ingest-hpa        Deployment/diabetes-ingest-api        cpu: <unknown>/70%   2         4         2          36m
+diabetes-manager-hpa       Deployment/diabetes-manager-api       cpu: <unknown>/70%   2         4         2          36m
+diabetes-forecasting-hpa   Deployment/diabetes-forecasting-api   cpu: 11%/70%         3         6         5          36m
+diabetes-clinical-hpa      Deployment/diabetes-clinical-api      cpu: 290%/70%        2         4         4          37m
+diabetes-forecasting-hpa   Deployment/diabetes-forecasting-api   cpu: 70%/70%         3         6         5          37m
+--- HPA & Pod State (Post-Run) ---
+NAME                       REFERENCE                             TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+diabetes-clinical-hpa      Deployment/diabetes-clinical-api      cpu: 290%/70%        2         4         4          37m
+diabetes-forecasting-hpa   Deployment/diabetes-forecasting-api   cpu: 70%/70%         3         6         5          37m
+diabetes-frontend-hpa      Deployment/diabetes-frontend          cpu: 2%/70%          2         4         2          37m
+diabetes-iam-hpa           Deployment/diabetes-iam-api           cpu: <unknown>/70%   2         4         2          37m
+diabetes-ingest-hpa        Deployment/diabetes-ingest-api        cpu: <unknown>/70%   2         4         2          37m
+diabetes-manager-hpa       Deployment/diabetes-manager-api       cpu: <unknown>/70%   2         4         2          37m
+NAME                                         CPU(cores)   MEMORY(bytes)   
+diabetes-clinical-api-7c559dccbf-fptpq       481m         235Mi           
+diabetes-clinical-api-7c559dccbf-hw5k7       175m         231Mi           
+diabetes-clinical-api-7c559dccbf-k9h47       777m         234Mi           
+diabetes-clinical-api-7c559dccbf-sm2z6       483m         234Mi           
+diabetes-forecasting-api-dcbc9588c-bpbbq     47m          69Mi            
+diabetes-forecasting-api-dcbc9588c-mw5w4     100m         81Mi            
+diabetes-forecasting-api-dcbc9588c-w6zgx     56m          83Mi            
+diabetes-forecasting-api-dcbc9588c-x52lq     80m          62Mi            
+diabetes-forecasting-api-dcbc9588c-xfw9j     68m          61Mi            
+diabetes-frontend-84754dd66c-2dnpx           1m           13Mi            
+diabetes-frontend-84754dd66c-wxswt           1m           13Mi            
+diabetes-iam-api-5466b469f9-797gq            7m           94Mi            
+diabetes-iam-api-5466b469f9-vm4rv            5m           94Mi            
+diabetes-ingest-api-7979f6cfb9-5vc2n         4m           92Mi            
+diabetes-ingest-api-7979f6cfb9-8swsn         4m           94Mi            
+diabetes-ingestion-worker-79f4f9966c-7hzkg   13m          74Mi            
+diabetes-ingestion-worker-79f4f9966c-8hv5v   7m           74Mi            
+diabetes-manager-api-76d6d85bdb-q64sd        10m          93Mi            
+diabetes-manager-api-76d6d85bdb-qhjdr        5m           94Mi            
+diabetes-model-repo-74744889fb-9mdx4         6m           54Mi            
+diabetes-pg-1                                594m         230Mi           
+diabetes-pg-2                                33m          45Mi            
+diabetes-redis-7658cd59d5-7prnq              65m          11Mi            
